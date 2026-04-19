@@ -33,3 +33,15 @@ export type CreatePlaceInput = {
 export type UpdatePlaceInput = Omit<CreatePlaceInput, 'lat' | 'lng'>;
 
 export type UploadIntent = 'original' | 'thumb';
+
+export function isSanitizedLockedPlace(place: Place) {
+  return (
+    place.is_locked &&
+    place.title === '' &&
+    place.content === '' &&
+    place.images.length === 0 &&
+    place.thumbnails.length === 0 &&
+    place.author === null &&
+    place.visited_at === null
+  );
+}

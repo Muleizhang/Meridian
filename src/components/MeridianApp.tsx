@@ -23,6 +23,11 @@ const MarkdownEditor = dynamic(
   { ssr: false }
 );
 
+const TimelineSlider = dynamic(
+  () => import('@/components/TimelineSlider').then((module) => module.TimelineSlider),
+  { ssr: false }
+);
+
 type MeridianAppProps = {
   initialPlaces: Place[];
   canEdit: boolean;
@@ -43,6 +48,8 @@ type PlacePayload = {
   visited_at: string | null;
   is_locked: boolean;
 };
+
+const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
 function toFormState(place?: Place) {
   return {
@@ -70,6 +77,16 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit) {
   return payload as T;
 }
 
+function filterPlacesByCursor(places: Place[], cursorTime: number) {
+  return places.filter((place) => {
+    if (!place.visited_at) {
+      return true;
+    }
+
+    return new Date(place.visited_at).getTime() <= cursorTime;
+  });
+}
+
 export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAppProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -83,10 +100,12 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAp
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; alt: string } | null>(null);
+  const [timelineCursorTime, setTimelineCursorTime] = useState(Date.now());
   const messageTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setPlaces(initialPlaces);
+    setTimelineCursorTime(Date.now());
   }, [initialPlaces]);
 
   useEffect(() => {
@@ -103,9 +122,11 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAp
     };
   }, []);
 
+  const nowTime = useMemo(() => Date.now(), []);
+  const visiblePlaces = useMemo(() => filterPlacesByCursor(places, timelineCursorTime), [places, timelineCursorTime]);
   const selectedPlace = useMemo(
-    () => places.find((place) => place.id === selectedPlaceId) ?? null,
-    [places, selectedPlaceId]
+    () => visiblePlaces.find((place) => place.id === selectedPlaceId) ?? places.find((place) => place.id === selectedPlaceId) ?? null,
+    [places, selectedPlaceId, visiblePlaces]
   );
 
   const authorOptions = useMemo(
@@ -210,6 +231,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAp
     });
 
     setPlaces((current) => [result.place, ...current]);
+    setTimelineCursorTime(Date.now());
     setSelectedPlaceId(result.place.id);
     setEditorState(null);
     updateQueryForPlace(result.place.id);
@@ -250,7 +272,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAp
   return (
     <div className="relative h-[100dvh] overflow-hidden bg-[#f7f6f2] text-zinc-900">
       <MapView
-        places={places}
+        places={visiblePlaces}
         selectedPlaceId={selectedPlaceId}
         pendingCenter={isPickerOpen ? pendingCenter : null}
         canEdit={canEdit}
@@ -261,7 +283,12 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAp
       <div className="pointer-events-none absolute inset-0 flex flex-col p-3 md:p-6">
         <Header canEdit={canEdit} onCreate={beginCreate} onShowMessage={showMessage} />
         <div className="flex-1" />
-        <TimelinePlaceholder places={places} />
+        <TimelineSlider
+          places={places}
+          cursorTime={timelineCursorTime}
+          nowTime={nowTime}
+          onCursorTimeChange={setTimelineCursorTime}
+        />
       </div>
 
       <CreatePinOverlay
@@ -365,6 +392,7 @@ function Header({ canEdit, onCreate, onShowMessage }: HeaderProps) {
   const logout = async () => {
     await fetch('/api/auth', { method: 'DELETE' });
     onShowMessage('已登出');
+    router.replace('/');
     router.refresh();
   };
 
@@ -390,25 +418,6 @@ function Header({ canEdit, onCreate, onShowMessage }: HeaderProps) {
             登录
           </a>
         )}
-      </div>
-    </div>
-  );
-}
-
-function TimelinePlaceholder({ places }: { places: Place[] }) {
-  return (
-    <div className="pointer-events-auto mx-auto w-full max-w-5xl pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-      <div className="meridian-panel rounded-[1.75rem] px-4 py-3 md:px-6">
-        <div className="flex items-center justify-between gap-4 text-xs text-zinc-500 md:text-sm">
-          <span>Timeline</span>
-          <span>{places.length} places</span>
-        </div>
-        <div className="mt-3 h-8 rounded-full bg-black/[0.04] px-3">
-          <div className="flex h-full items-center justify-between text-[11px] text-zinc-400 md:text-xs">
-            <span>过去一年</span>
-            <span>Now</span>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -639,7 +648,7 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
             <AuthorCombobox value={author} options={authorOptions} onChange={setAuthor} />
 
             <label className="flex items-center justify-between rounded-[1.25rem] border border-black/8 bg-white/70 px-4 py-3">
-              <span className="text-sm text-zinc-700">上锁（MVP 仅保留字段）</span>
+              <span className="text-sm text-zinc-700">上锁</span>
               <input type="checkbox" checked={isLocked} onChange={(event) => setIsLocked(event.target.checked)} />
             </label>
 

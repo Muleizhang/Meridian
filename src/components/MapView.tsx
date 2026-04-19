@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import type { Place } from '@/lib/types';
+import { isSanitizedLockedPlace, type Place } from '@/lib/types';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
@@ -126,6 +126,7 @@ export function MapView({
     markersRef.current.clear();
 
     places.forEach((place) => {
+      const isHiddenLockedPlace = isSanitizedLockedPlace(place);
       const markerElement = document.createElement('button');
       markerElement.type = 'button';
       markerElement.className = 'group relative flex flex-col items-center border-0 bg-transparent p-0';
@@ -136,14 +137,14 @@ export function MapView({
         'flex h-14 w-14 items-center justify-center rounded-full border border-white/70 shadow-[0_12px_32px_rgba(15,23,42,0.18)] transition-transform duration-200 group-hover:scale-105',
         selectedPlaceId === place.id ? 'ring-4 ring-black/10' : ''
       ].join(' ');
-      bubble.style.backgroundColor = place.is_locked || !place.thumbnails[0] ? '#d4d4d8' : '#ffffff';
+      bubble.style.backgroundColor = isHiddenLockedPlace || !place.thumbnails[0] ? '#d4d4d8' : '#ffffff';
       bubble.style.backgroundSize = 'cover';
       bubble.style.backgroundPosition = 'center';
-      bubble.style.backgroundImage = !place.is_locked && place.thumbnails[0] ? `url("${place.thumbnails[0]}")` : 'none';
-      bubble.textContent = place.is_locked ? '🔒' : '';
+      bubble.style.backgroundImage = !isHiddenLockedPlace && place.thumbnails[0] ? `url("${place.thumbnails[0]}")` : 'none';
+      bubble.textContent = isHiddenLockedPlace ? '🔒' : '';
       markerElement.appendChild(bubble);
 
-      if (place.title && !place.is_locked) {
+      if (place.title && !isHiddenLockedPlace) {
         const label = document.createElement('div');
         label.className = 'mt-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-zinc-700 shadow-sm';
         label.textContent = place.title;
