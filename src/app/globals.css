@@ -46,6 +46,10 @@
   box-sizing: border-box;
 }
 
+html {
+  background: #0d1117;
+}
+
 html,
 body {
   margin: 0;
@@ -57,6 +61,9 @@ body {
 
 body {
   min-height: 100dvh;
+}
+
+html[data-theme-ready='true'] body {
   transition: background-color 180ms ease, color 180ms ease;
 }
 

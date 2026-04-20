@@ -5,6 +5,7 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useState
 export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'meridian-theme';
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 type ThemeContextValue = {
   theme: Theme;
@@ -12,24 +13,20 @@ type ThemeContextValue = {
   toggleTheme: () => void;
 };
 
+type ThemeProviderProps = {
+  children: ReactNode;
+  initialTheme: Theme;
+};
+
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function getPreferredTheme(): Theme {
+function getStoredTheme(): Theme | null {
   if (typeof window === 'undefined') {
-    return 'light';
+    return null;
   }
 
   const storedTheme = window.localStorage.getItem(STORAGE_KEY);
-  if (storedTheme === 'dark' || storedTheme === 'light') {
-    return storedTheme;
-  }
-
-  const currentTheme = document.documentElement.dataset.theme;
-  if (currentTheme === 'dark' || currentTheme === 'light') {
-    return currentTheme;
-  }
-
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : null;
 }
 
 function applyTheme(theme: Theme) {
@@ -37,15 +34,29 @@ function applyTheme(theme: Theme) {
   root.classList.remove('light', 'dark');
   root.classList.add(theme);
   root.dataset.theme = theme;
+  root.dataset.themeReady = 'true';
   root.style.colorScheme = theme;
+  root.style.backgroundColor = theme === 'dark' ? '#0d1117' : '#f7f6f2';
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(getPreferredTheme);
+function persistTheme(theme: Theme) {
+  window.localStorage.setItem(STORAGE_KEY, theme);
+  document.cookie = `${STORAGE_KEY}=${theme}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
+}
+
+export function ThemeProvider({ children, initialTheme }: ThemeProviderProps) {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+
+  useEffect(() => {
+    const storedTheme = getStoredTheme();
+    if (storedTheme && storedTheme !== initialTheme) {
+      setTheme(storedTheme);
+    }
+  }, [initialTheme]);
 
   useEffect(() => {
     applyTheme(theme);
-    window.localStorage.setItem(STORAGE_KEY, theme);
+    persistTheme(theme);
   }, [theme]);
 
   useEffect(() => {
