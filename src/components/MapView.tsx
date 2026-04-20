@@ -17,6 +17,74 @@ type MapViewProps = {
   onSelectPlace: (placeId: number) => void;
 };
 
+type StoredViewport = {
+  lat: number;
+  lng: number;
+  zoom: number;
+};
+
+const VIEWPORT_STORAGE_KEY = 'meridian-map-viewport';
+
+const getMapStyle = (theme: MapViewProps['theme']) =>
+  theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/outdoors-v12';
+
+const getMapAtmosphere = (theme: MapViewProps['theme']) =>
+  theme === 'dark'
+    ? {
+        color: 'rgb(5, 7, 12)',
+        'high-color': 'rgb(5, 7, 12)',
+        'space-color': 'rgb(10, 14, 28)',
+        'horizon-blend': 0,
+        'star-intensity': 0.85
+      }
+    : {
+        color: 'rgb(186, 210, 235)',
+        'high-color': 'rgb(36, 92, 223)',
+        'space-color': 'rgb(11, 11, 25)',
+        'horizon-blend': 0.02,
+        'star-intensity': 0.6
+      };
+
+const applyMapAtmosphere = (map: mapboxgl.Map, theme: MapViewProps['theme']) => {
+  if (!map.isStyleLoaded()) {
+    return;
+  }
+
+  map.setProjection('globe');
+  map.setFog(getMapAtmosphere(theme));
+};
+
+function getStoredViewport(): StoredViewport | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const storedViewport = window.sessionStorage.getItem(VIEWPORT_STORAGE_KEY);
+  if (!storedViewport) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(storedViewport) as Partial<StoredViewport>;
+    if (typeof parsed.lat !== 'number' || typeof parsed.lng !== 'number' || typeof parsed.zoom !== 'number') {
+      return null;
+    }
+
+    return parsed as StoredViewport;
+  } catch {
+    return null;
+  }
+}
+
+function persistViewport(map: mapboxgl.Map) {
+  const center = map.getCenter();
+  window.sessionStorage.setItem(
+    VIEWPORT_STORAGE_KEY,
+    JSON.stringify({ lat: center.lat, lng: center.lng, zoom: map.getZoom() })
+  );
+}
+
+
 export function MapView({
   places,
   selectedPlaceId,
@@ -28,7 +96,12 @@ export function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const themeRef = useRef<MapViewProps['theme']>(theme);
+  const currentStyleRef = useRef<string | null>(null);
   const markersRef = useRef<Map<number, mapboxgl.Marker>>(new Map());
+  const initialViewportRef = useRef<StoredViewport | null>(getStoredViewport());
+  const hasStoredViewportRef = useRef(Boolean(initialViewportRef.current));
+  const previousSelectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
   const isPickingCenter = canEdit && pendingCenter !== null;
 
   const bounds = useMemo(() => {
@@ -46,34 +119,60 @@ export function MapView({
       return;
     }
 
+    const initialTheme = themeRef.current;
+    const initialViewport = initialViewportRef.current;
+    const style = getMapStyle(initialTheme);
+    currentStyleRef.current = style;
+
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/light-v11',
-      center: [121.4737, 31.2304],
-      zoom: 2.2,
+      style,
+      center: initialViewport ? [initialViewport.lng, initialViewport.lat] : [121.4737, 31.2304],
+      zoom: initialViewport?.zoom ?? 2.2,
       attributionControl: false
     });
 
     const markers = markersRef.current;
+    const handleStyleLoad = () => {
+      applyMapAtmosphere(map, themeRef.current);
+    };
+    const handleMoveEnd = () => {
+      persistViewport(map);
+    };
 
     map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-left');
+    map.on('style.load', handleStyleLoad);
+    map.on('moveend', handleMoveEnd);
     mapRef.current = map;
+    persistViewport(map);
 
     return () => {
+      map.off('style.load', handleStyleLoad);
+      map.off('moveend', handleMoveEnd);
       markers.forEach((marker) => marker.remove());
       markers.clear();
       map.remove();
       mapRef.current = null;
+      currentStyleRef.current = null;
     };
   }, []);
 
   useEffect(() => {
+    themeRef.current = theme;
+
     const map = mapRef.current;
     if (!map) {
       return;
     }
 
-    map.setStyle(theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11');
+    const style = getMapStyle(theme);
+    if (currentStyleRef.current === style) {
+      applyMapAtmosphere(map, theme);
+      return;
+    }
+
+    currentStyleRef.current = style;
+    map.setStyle(style);
   }, [theme]);
 
   useEffect(() => {
@@ -97,11 +196,22 @@ export function MapView({
 
   useEffect(() => {
     const map = mapRef.current;
+    const previousSelectedPlaceId = previousSelectedPlaceIdRef.current;
+    previousSelectedPlaceIdRef.current = selectedPlaceId;
+
     if (!map || !bounds) {
       return;
     }
 
     if (selectedPlaceId) {
+      return;
+    }
+
+    if (previousSelectedPlaceId) {
+      return;
+    }
+
+    if (hasStoredViewportRef.current) {
       return;
     }
 

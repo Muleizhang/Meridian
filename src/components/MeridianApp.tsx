@@ -388,6 +388,10 @@ type HeaderProps = {
 
 function Header({ canEdit, onCreate, onShowMessage }: HeaderProps) {
   const router = useRouter();
+  const { theme } = useTheme();
+  const actionButtonClassName = theme === 'light' ? 'meridian-button meridian-button--overlay-light' : 'meridian-button';
+  const secondaryActionButtonClassName =
+    theme === 'light' ? 'meridian-button meridian-button--overlay-light' : 'meridian-button meridian-button--secondary';
 
   const logout = async () => {
     await fetch('/api/auth', { method: 'DELETE' });
@@ -404,18 +408,18 @@ function Header({ canEdit, onCreate, onShowMessage }: HeaderProps) {
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">
-        <ThemeToggleButton />
+        <ThemeToggleButton className={theme === 'light' ? 'meridian-button--overlay-light' : undefined} />
         {canEdit ? (
-          <button type="button" className="meridian-button" onClick={onCreate}>
+          <button type="button" className={actionButtonClassName} onClick={onCreate}>
             新建
           </button>
         ) : null}
         {canEdit ? (
-          <button type="button" className="meridian-button meridian-button--secondary" onClick={logout}>
+          <button type="button" className={secondaryActionButtonClassName} onClick={logout}>
             登出
           </button>
         ) : (
-          <a href="/login" className="meridian-button">
+          <a href="/login" className={actionButtonClassName}>
             登录
           </a>
         )}
