@@ -15,13 +15,6 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getPreferredTheme(): Theme {
-  if (typeof document !== 'undefined') {
-    const currentTheme = document.documentElement.dataset.theme;
-    if (currentTheme === 'dark' || currentTheme === 'light') {
-      return currentTheme;
-    }
-  }
-
   if (typeof window === 'undefined') {
     return 'light';
   }
@@ -29,6 +22,11 @@ function getPreferredTheme(): Theme {
   const storedTheme = window.localStorage.getItem(STORAGE_KEY);
   if (storedTheme === 'dark' || storedTheme === 'light') {
     return storedTheme;
+  }
+
+  const currentTheme = document.documentElement.dataset.theme;
+  if (currentTheme === 'dark' || currentTheme === 'light') {
+    return currentTheme;
   }
 
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
