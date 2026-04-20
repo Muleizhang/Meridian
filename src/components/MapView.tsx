@@ -84,6 +84,14 @@ function persistViewport(map: mapboxgl.Map) {
   );
 }
 
+function persistViewportValue(viewport: StoredViewport) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem(VIEWPORT_STORAGE_KEY, JSON.stringify(viewport));
+}
+
 
 export function MapView({
   places,
@@ -237,7 +245,9 @@ export function MapView({
       return;
     }
 
-    map.easeTo({ center: [selectedPlace.lng, selectedPlace.lat], zoom: Math.max(map.getZoom(), 4.5), duration: 700 });
+    const nextZoom = Math.max(map.getZoom(), 4.5);
+    persistViewportValue({ lat: selectedPlace.lat, lng: selectedPlace.lng, zoom: nextZoom });
+    map.easeTo({ center: [selectedPlace.lng, selectedPlace.lat], zoom: nextZoom, duration: 700 });
   }, [places, selectedPlaceId]);
 
   useEffect(() => {
@@ -280,7 +290,11 @@ export function MapView({
         markerElement.appendChild(label);
       }
 
-      markerElement.addEventListener('click', () => onSelectPlace(place.id));
+      markerElement.addEventListener('click', () => {
+        const nextZoom = Math.max(map.getZoom(), 4.5);
+        persistViewportValue({ lat: place.lat, lng: place.lng, zoom: nextZoom });
+        onSelectPlace(place.id);
+      });
 
       const marker = new mapboxgl.Marker({ element: markerElement, anchor: 'center' })
         .setLngLat([place.lng, place.lat])
