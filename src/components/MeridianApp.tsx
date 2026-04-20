@@ -12,10 +12,12 @@ import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/cn';
 import { createImageVariants } from '@/lib/compress';
 import type { Place } from '@/lib/types';
+import appleIcon from '@/app/apple-icon.png';
+import darkAppleIcon from '@/app/icon-dark-512.png';
 
 const MapView = dynamic(() => import('@/components/MapView').then((module) => module.MapView), {
   ssr: false,
-  loading: () => <div className="meridian-panel h-[100dvh] w-full rounded-none md:rounded-[2rem]" />
+  loading: () => <div className="meridian-panel h-[100svh] h-[100dvh] w-full rounded-none md:rounded-[2rem]" />
 });
 
 const MarkdownEditor = dynamic(
@@ -270,7 +272,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
   };
 
   return (
-    <div className="relative h-[100dvh] overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+    <div className="relative h-[100svh] h-[100dvh] overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       <MapView
         places={visiblePlaces}
         selectedPlaceId={selectedPlaceId}
@@ -281,7 +283,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
         onSelectPlace={selectPlace}
       />
 
-      <div className="pointer-events-none absolute inset-0 flex flex-col p-3 md:p-6">
+      <div className="pointer-events-none absolute inset-0 flex flex-col px-[max(0.75rem,var(--safe-area-left))] pt-[max(0.75rem,var(--safe-area-top))] pr-[max(0.75rem,var(--safe-area-right))] md:p-6">
         <Header canEdit={canEdit} onCreate={beginCreate} onShowMessage={showMessage} siteDescription={siteDescription} />
         <div className="flex-1" />
         <TimelineSlider
@@ -371,7 +373,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 16 }}
-            className="meridian-panel fixed bottom-28 left-1/2 z-[100] -translate-x-1/2 rounded-2xl px-4 py-3 text-sm"
+            className="meridian-panel fixed bottom-[calc(max(var(--safe-area-bottom),0.75rem)+6rem)] left-1/2 z-[100] -translate-x-1/2 rounded-2xl px-4 py-3 text-sm"
           >
             {message}
           </motion.div>
@@ -391,9 +393,15 @@ type HeaderProps = {
 function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderProps) {
   const router = useRouter();
   const { theme } = useTheme();
-  const actionButtonClassName = theme === 'light' ? 'meridian-button meridian-button--overlay-light' : 'meridian-button';
-  const secondaryActionButtonClassName =
-    theme === 'light' ? 'meridian-button meridian-button--overlay-light' : 'meridian-button meridian-button--secondary';
+  const actionButtonClassName = cn(
+    'meridian-button meridian-header-button',
+    theme === 'light' ? 'meridian-button--overlay-light' : ''
+  );
+  const secondaryActionButtonClassName = cn(
+    'meridian-button meridian-header-button',
+    theme === 'light' ? 'meridian-button--overlay-light' : 'meridian-button--secondary'
+  );
+  const brandIcon = theme === 'dark' ? darkAppleIcon : appleIcon;
 
   const logout = async () => {
     await fetch('/api/auth', { method: 'DELETE' });
@@ -403,10 +411,13 @@ function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderPro
   };
 
   return (
-    <div className="pointer-events-none flex items-start justify-between gap-4">
-      <div className="meridian-panel pointer-events-auto max-w-md rounded-[1.75rem] px-5 py-4">
-        <div className="text-lg font-semibold md:text-xl">Meridian</div>
-        <div className="meridian-muted-text mt-1 text-sm">{siteDescription}</div>
+    <div className="pointer-events-none flex items-start justify-between gap-3 md:gap-4">
+      <div className="meridian-panel pointer-events-auto max-w-md rounded-[1.75rem] px-3 py-3 md:px-5 md:py-4">
+        <div className="flex items-center gap-2.5 md:gap-3">
+          <Image src={brandIcon} alt="" width={32} height={32} className="h-8 w-8 rounded-lg md:h-9 md:w-9 md:rounded-xl" priority />
+          <div className="text-sm font-semibold md:text-xl">Meridian</div>
+        </div>
+        <div className="meridian-muted-text mt-1 text-[11px] md:text-sm">{siteDescription}</div>
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">
@@ -451,7 +462,7 @@ function CreatePinOverlay({ open, center, onCancel, onConfirm }: CreatePinOverla
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
-            className="meridian-panel absolute inset-x-3 bottom-28 z-30 rounded-[1.75rem] px-4 py-4 md:inset-x-auto md:left-1/2 md:w-[420px] md:-translate-x-1/2"
+            className="meridian-panel absolute inset-x-3 bottom-[calc(max(var(--safe-area-bottom),0.75rem)+6rem)] z-30 rounded-[1.75rem] px-4 py-4 md:inset-x-auto md:left-1/2 md:w-[420px] md:-translate-x-1/2"
           >
             <div className="text-sm font-medium">拖动地图来选择位置</div>
             <div className="meridian-muted-text mt-2 text-xs">
@@ -489,7 +500,7 @@ function DetailPanel({ place, canEdit, isDeleting, onClose, onEdit, onDelete, on
       animate={{ opacity: 1, x: 0, y: 0 }}
       exit={{ opacity: 0, x: 32, y: 12 }}
       transition={{ type: 'spring', stiffness: 220, damping: 24 }}
-      className="meridian-panel absolute inset-x-3 bottom-28 top-24 z-40 rounded-[2rem] p-5 md:inset-x-auto md:bottom-6 md:right-6 md:top-24 md:w-[420px]"
+      className="meridian-panel absolute inset-x-3 bottom-[calc(max(var(--safe-area-bottom),0.75rem)+6rem)] top-[calc(max(var(--safe-area-top),0.75rem)+4.75rem)] z-40 rounded-[2rem] p-5 md:inset-x-auto md:bottom-6 md:right-6 md:top-24 md:w-[420px]"
     >
       <div className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-3">
@@ -614,7 +625,7 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
       animate={{ opacity: 1, x: 0, y: 0 }}
       exit={{ opacity: 0, x: 32, y: 12 }}
       transition={{ type: 'spring', stiffness: 220, damping: 24 }}
-      className="meridian-panel absolute inset-x-3 bottom-28 top-24 z-50 rounded-[2rem] p-5 md:inset-x-auto md:bottom-6 md:right-6 md:top-24 md:w-[420px]"
+      className="meridian-panel absolute inset-x-3 bottom-[calc(max(var(--safe-area-bottom),0.75rem)+6rem)] top-[calc(max(var(--safe-area-top),0.75rem)+4.75rem)] z-50 rounded-[2rem] p-5 md:inset-x-auto md:bottom-6 md:right-6 md:top-24 md:w-[420px]"
     >
       <div className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-3">

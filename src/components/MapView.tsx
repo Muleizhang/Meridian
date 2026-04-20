@@ -140,7 +140,6 @@ export function MapView({
       persistViewport(map);
     };
 
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-left');
     map.on('style.load', handleStyleLoad);
     map.on('moveend', handleMoveEnd);
     mapRef.current = map;

@@ -38,8 +38,8 @@ export function LoginForm() {
   };
 
   return (
-    <main className="relative flex min-h-[100dvh] items-center justify-center bg-[var(--background)] px-4 py-8 text-[var(--foreground)]">
-      <div className="absolute right-4 top-4 z-10 md:right-6 md:top-6">
+    <main className="relative flex min-h-[100svh] min-h-[100dvh] items-center justify-center bg-[var(--background)] px-4 py-8 text-[var(--foreground)]">
+      <div className="absolute right-[max(1rem,var(--safe-area-right))] top-[max(1rem,var(--safe-area-top))] z-10 md:right-6 md:top-6">
         <ThemeToggleButton />
       </div>
       <motion.div

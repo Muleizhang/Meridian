@@ -10,7 +10,7 @@ export function ThemeToggleButton({ className }: { className?: string }) {
   return (
     <button
       type="button"
-      className={cn('meridian-button meridian-button--secondary px-3 py-2 text-sm', className)}
+      className={cn('meridian-button meridian-button--secondary meridian-header-button px-3 py-2 text-sm', className)}
       onClick={toggleTheme}
       aria-label={isDark ? '切换到浅色模式' : '切换到深色模式'}
       title={isDark ? '切换到浅色模式' : '切换到深色模式'}

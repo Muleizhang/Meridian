@@ -37,6 +37,16 @@ function applyTheme(theme: Theme) {
   root.dataset.themeReady = 'true';
   root.style.colorScheme = theme;
   root.style.backgroundColor = theme === 'dark' ? '#0d1117' : '#f7f6f2';
+  const themeColor = theme === 'dark' ? '#0d1117' : '#f7f6f2';
+  let themeColorMeta = document.querySelector('meta[name="theme-color"]');
+
+  if (!themeColorMeta) {
+    themeColorMeta = document.createElement('meta');
+    themeColorMeta.setAttribute('name', 'theme-color');
+    document.head.appendChild(themeColorMeta);
+  }
+
+  themeColorMeta.setAttribute('content', themeColor);
 }
 
 function persistTheme(theme: Theme) {

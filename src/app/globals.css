@@ -18,6 +18,10 @@
   --accent-foreground: #ffffff;
   --marker: #18181b;
   --marker-muted: #71717a;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   color-scheme: light;
 }
 
@@ -60,6 +64,7 @@ body {
 }
 
 body {
+  min-height: 100svh;
   min-height: 100dvh;
 }
 
@@ -129,11 +134,16 @@ img {
 }
 
 .meridian-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 1rem;
   padding: 0.8rem 1rem;
   background: var(--accent);
   color: var(--accent-foreground);
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: transform 150ms ease, opacity 150ms ease, background 150ms ease, color 150ms ease;
 }
@@ -166,6 +176,21 @@ img {
 .meridian-button--overlay-light:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.9);
+}
+
+.meridian-header-button {
+  min-height: 2.5rem;
+  border-radius: 9999px;
+  padding: 0.7rem 0.95rem;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .meridian-header-button {
+    min-height: auto;
+    border-radius: 1rem;
+    padding: 0.8rem 1rem;
+  }
 }
 
 .meridian-muted-text {
