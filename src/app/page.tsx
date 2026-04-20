@@ -16,12 +16,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const rawPlace = Array.isArray(params.place) ? params.place[0] : params.place;
   const focusPlaceId = rawPlace ? Number(rawPlace) : undefined;
   const visiblePlaces = session.loggedIn ? places : places.map(sanitizePlaceForPublic);
+  const siteDescription = process.env.MERIDIAN_SITE_DESCRIPTION ?? '一个双人使用的私密旅行记录网站';
 
   return (
     <MeridianApp
       initialPlaces={visiblePlaces}
       canEdit={Boolean(session.loggedIn)}
       focusPlaceId={Number.isInteger(focusPlaceId) ? focusPlaceId : undefined}
+      siteDescription={siteDescription}
     />
   );
 }

@@ -32,6 +32,7 @@ type MeridianAppProps = {
   initialPlaces: Place[];
   canEdit: boolean;
   focusPlaceId?: number;
+  siteDescription: string;
 };
 
 type EditorState =
@@ -85,7 +86,7 @@ function filterPlacesByCursor(places: Place[], cursorTime: number) {
   });
 }
 
-export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAppProps) {
+export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescription }: MeridianAppProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -281,7 +282,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId }: MeridianAp
       />
 
       <div className="pointer-events-none absolute inset-0 flex flex-col p-3 md:p-6">
-        <Header canEdit={canEdit} onCreate={beginCreate} onShowMessage={showMessage} />
+        <Header canEdit={canEdit} onCreate={beginCreate} onShowMessage={showMessage} siteDescription={siteDescription} />
         <div className="flex-1" />
         <TimelineSlider
           places={places}
@@ -384,9 +385,10 @@ type HeaderProps = {
   canEdit: boolean;
   onCreate: () => void;
   onShowMessage: (message: string) => void;
+  siteDescription: string;
 };
 
-function Header({ canEdit, onCreate, onShowMessage }: HeaderProps) {
+function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const actionButtonClassName = theme === 'light' ? 'meridian-button meridian-button--overlay-light' : 'meridian-button';
@@ -404,7 +406,7 @@ function Header({ canEdit, onCreate, onShowMessage }: HeaderProps) {
     <div className="pointer-events-none flex items-start justify-between gap-4">
       <div className="meridian-panel pointer-events-auto max-w-md rounded-[1.75rem] px-5 py-4">
         <div className="text-lg font-semibold md:text-xl">Meridian</div>
-        <div className="meridian-muted-text mt-1 text-sm">一个双人使用的私密旅行记录网站</div>
+        <div className="meridian-muted-text mt-1 text-sm">{siteDescription}</div>
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">
