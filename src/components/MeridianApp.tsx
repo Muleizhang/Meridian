@@ -395,7 +395,7 @@ function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderPro
   const { theme } = useTheme();
   const actionButtonClassName = cn(
     'meridian-button meridian-header-button',
-    theme === 'light' ? 'meridian-button--overlay-light' : ''
+    theme === 'light' ? 'meridian-button--overlay-light' : 'meridian-button--secondary'
   );
   const secondaryActionButtonClassName = cn(
     'meridian-button meridian-header-button',

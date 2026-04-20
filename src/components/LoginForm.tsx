@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -39,6 +40,11 @@ export function LoginForm() {
 
   return (
     <main className="relative flex min-h-[100svh] min-h-[100dvh] items-center justify-center bg-[var(--background)] px-4 py-8 text-[var(--foreground)]">
+      <div className="absolute left-[max(1rem,var(--safe-area-left))] top-[max(1rem,var(--safe-area-top))] z-10 md:left-6 md:top-6">
+        <Link href="/" className="meridian-button meridian-button--secondary meridian-header-button">
+          返回首页
+        </Link>
+      </div>
       <div className="absolute right-[max(1rem,var(--safe-area-right))] top-[max(1rem,var(--safe-area-top))] z-10 md:right-6 md:top-6">
         <ThemeToggleButton />
       </div>
