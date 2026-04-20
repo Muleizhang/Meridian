@@ -29,6 +29,7 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<number, mapboxgl.Marker>>(new Map());
+  const isPickingCenter = canEdit && pendingCenter !== null;
 
   const bounds = useMemo(() => {
     if (places.length === 0) {
@@ -77,7 +78,7 @@ export function MapView({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !pendingCenter || !canEdit) {
+    if (!map || !isPickingCenter) {
       return;
     }
 
@@ -92,7 +93,7 @@ export function MapView({
     return () => {
       map.off('move', handleMove);
     };
-  }, [canEdit, onCenterChange, pendingCenter]);
+  }, [isPickingCenter, onCenterChange]);
 
   useEffect(() => {
     const map = mapRef.current;
