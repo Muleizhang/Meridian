@@ -99,8 +99,8 @@ export function MapView({
   const themeRef = useRef<MapViewProps['theme']>(theme);
   const currentStyleRef = useRef<string | null>(null);
   const markersRef = useRef<Map<number, mapboxgl.Marker>>(new Map());
-  const initialViewportRef = useRef<StoredViewport | null>(getStoredViewport());
-  const hasStoredViewportRef = useRef(Boolean(initialViewportRef.current));
+  const initialViewportRef = useRef<StoredViewport | null>(null);
+  const hasStoredViewportRef = useRef(false);
   const previousSelectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
   const isPickingCenter = canEdit && pendingCenter !== null;
 
@@ -120,7 +120,10 @@ export function MapView({
     }
 
     const initialTheme = themeRef.current;
-    const initialViewport = initialViewportRef.current;
+    const storedViewport = getStoredViewport();
+    initialViewportRef.current = storedViewport;
+    hasStoredViewportRef.current = Boolean(storedViewport);
+    const initialViewport = storedViewport;
     const style = getMapStyle(initialTheme);
     currentStyleRef.current = style;
 
@@ -250,7 +253,7 @@ export function MapView({
       const isHiddenLockedPlace = isSanitizedLockedPlace(place);
       const markerElement = document.createElement('button');
       markerElement.type = 'button';
-      markerElement.className = 'group relative flex flex-col items-center border-0 bg-transparent p-0';
+      markerElement.className = 'group relative border-0 bg-transparent p-0';
       markerElement.setAttribute('aria-label', place.title || 'place marker');
 
       const bubble = document.createElement('div');
@@ -268,16 +271,18 @@ export function MapView({
 
       if (place.title && !isHiddenLockedPlace) {
         const label = document.createElement('div');
-        label.className = 'mt-2 rounded-full px-3 py-1 text-xs font-medium shadow-sm';
+        label.className = 'pointer-events-none absolute left-1/2 top-full mt-2 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden text-ellipsis whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium shadow-sm';
         label.style.background = 'var(--panel-strong)';
         label.style.color = 'var(--foreground)';
+        label.style.writingMode = 'horizontal-tb';
+        label.style.textOrientation = 'mixed';
         label.textContent = place.title;
         markerElement.appendChild(label);
       }
 
       markerElement.addEventListener('click', () => onSelectPlace(place.id));
 
-      const marker = new mapboxgl.Marker({ element: markerElement, anchor: 'bottom' })
+      const marker = new mapboxgl.Marker({ element: markerElement, anchor: 'center' })
         .setLngLat([place.lng, place.lat])
         .addTo(map);
 
