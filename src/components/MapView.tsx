@@ -12,6 +12,7 @@ type MapViewProps = {
   selectedPlaceId: number | null;
   pendingCenter: { lat: number; lng: number } | null;
   canEdit: boolean;
+  theme: 'light' | 'dark';
   onCenterChange: (center: { lat: number; lng: number }) => void;
   onSelectPlace: (placeId: number) => void;
 };
@@ -21,6 +22,7 @@ export function MapView({
   selectedPlaceId,
   pendingCenter,
   canEdit,
+  theme,
   onCenterChange,
   onSelectPlace
 }: MapViewProps) {
@@ -63,6 +65,15 @@ export function MapView({
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    map.setStyle(theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11');
+  }, [theme]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -135,18 +146,21 @@ export function MapView({
       const bubble = document.createElement('div');
       bubble.className = [
         'flex h-14 w-14 items-center justify-center rounded-full border border-white/70 shadow-[0_12px_32px_rgba(15,23,42,0.18)] transition-transform duration-200 group-hover:scale-105',
-        selectedPlaceId === place.id ? 'ring-4 ring-black/10' : ''
+        selectedPlaceId === place.id ? 'ring-4 ring-black/10 dark:ring-white/20' : ''
       ].join(' ');
-      bubble.style.backgroundColor = isHiddenLockedPlace || !place.thumbnails[0] ? '#d4d4d8' : '#ffffff';
+      bubble.style.backgroundColor = isHiddenLockedPlace || !place.thumbnails[0] ? 'var(--marker-muted)' : 'var(--panel-strong)';
       bubble.style.backgroundSize = 'cover';
       bubble.style.backgroundPosition = 'center';
       bubble.style.backgroundImage = !isHiddenLockedPlace && place.thumbnails[0] ? `url("${place.thumbnails[0]}")` : 'none';
+      bubble.style.color = 'var(--accent-foreground)';
       bubble.textContent = isHiddenLockedPlace ? '🔒' : '';
       markerElement.appendChild(bubble);
 
       if (place.title && !isHiddenLockedPlace) {
         const label = document.createElement('div');
-        label.className = 'mt-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-zinc-700 shadow-sm';
+        label.className = 'mt-2 rounded-full px-3 py-1 text-xs font-medium shadow-sm';
+        label.style.background = 'var(--panel-strong)';
+        label.style.color = 'var(--foreground)';
         label.textContent = place.title;
         markerElement.appendChild(label);
       }
@@ -159,7 +173,7 @@ export function MapView({
 
       markersRef.current.set(place.id, marker);
     });
-  }, [onSelectPlace, places, selectedPlaceId]);
+  }, [onSelectPlace, places, selectedPlaceId, theme]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

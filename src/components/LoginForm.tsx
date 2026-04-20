@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 
 export function LoginForm() {
   const router = useRouter();
@@ -37,18 +38,21 @@ export function LoginForm() {
   };
 
   return (
-    <main className="flex min-h-[100dvh] items-center justify-center bg-[#f7f6f2] px-4 py-8">
+    <main className="relative flex min-h-[100dvh] items-center justify-center bg-[var(--background)] px-4 py-8 text-[var(--foreground)]">
+      <div className="absolute right-4 top-4 z-10 md:right-6 md:top-6">
+        <ThemeToggleButton />
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         className="meridian-panel w-full max-w-md rounded-[2rem] p-6 md:p-8"
       >
         <div className="text-2xl font-semibold">Meridian</div>
-        <p className="mt-2 text-sm text-zinc-500">输入编辑密码以进入记录维护模式。</p>
+        <p className="meridian-muted-text mt-2 text-sm">输入编辑密码以进入记录维护模式。</p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <label className="block">
-            <div className="mb-2 text-sm text-zinc-600">编辑密码</div>
+            <div className="meridian-muted-text-strong mb-2 text-sm">编辑密码</div>
             <input
               type="password"
               className="meridian-input"

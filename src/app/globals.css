@@ -1,13 +1,45 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light;
+:root,
+.light,
+.light-theme {
   --background: #f7f6f2;
   --foreground: #18181b;
   --muted: #6b7280;
+  --muted-strong: #52525b;
   --border: rgba(24, 24, 27, 0.08);
+  --border-strong: rgba(24, 24, 27, 0.14);
   --panel: rgba(255, 255, 255, 0.84);
   --panel-strong: rgba(255, 255, 255, 0.96);
+  --panel-soft: rgba(255, 255, 255, 0.72);
+  --panel-muted: rgba(24, 24, 27, 0.06);
+  --overlay: rgba(0, 0, 0, 0.8);
+  --accent: #18181b;
+  --accent-foreground: #ffffff;
+  --marker: #18181b;
+  --marker-muted: #71717a;
+  color-scheme: light;
+}
+
+:root.dark,
+.dark,
+.dark-theme {
+  --background: #0d1117;
+  --foreground: #f3f4f6;
+  --muted: #9ca3af;
+  --muted-strong: #d1d5db;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --panel: rgba(17, 24, 39, 0.78);
+  --panel-strong: rgba(17, 24, 39, 0.92);
+  --panel-soft: rgba(30, 41, 59, 0.72);
+  --panel-muted: rgba(255, 255, 255, 0.08);
+  --overlay: rgba(0, 0, 0, 0.88);
+  --accent: #f3f4f6;
+  --accent-foreground: #111827;
+  --marker: #f3f4f6;
+  --marker-muted: #a1a1aa;
+  color-scheme: dark;
 }
 
 * {
@@ -25,6 +57,7 @@ body {
 
 body {
   min-height: 100dvh;
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
 button,
@@ -32,6 +65,10 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+input[type='checkbox'] {
+  accent-color: var(--foreground);
 }
 
 a {
@@ -51,29 +88,47 @@ img {
   box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
 }
 
+.meridian-panel-strong {
+  background: var(--panel-strong);
+}
+
+.meridian-soft-surface {
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+}
+
+.meridian-muted-surface {
+  background: var(--panel-muted);
+}
+
 .meridian-input {
   width: 100%;
   border-radius: 1rem;
-  border: 1px solid rgba(24, 24, 27, 0.12);
-  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border-strong);
+  background: var(--panel-strong);
+  color: var(--foreground);
   padding: 0.85rem 1rem;
   outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.meridian-input::placeholder {
+  color: var(--muted);
 }
 
 .meridian-input:focus {
-  border-color: rgba(24, 24, 27, 0.3);
-  box-shadow: 0 0 0 4px rgba(24, 24, 27, 0.06);
+  border-color: color-mix(in srgb, var(--foreground) 30%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--foreground) 10%, transparent);
 }
 
 .meridian-button {
   border: 0;
   border-radius: 1rem;
   padding: 0.8rem 1rem;
-  background: #18181b;
-  color: white;
+  background: var(--accent);
+  color: var(--accent-foreground);
   cursor: pointer;
-  transition: transform 150ms ease, opacity 150ms ease, background 150ms ease;
+  transition: transform 150ms ease, opacity 150ms ease, background 150ms ease, color 150ms ease;
 }
 
 .meridian-button:hover {
@@ -84,9 +139,21 @@ img {
   transform: scale(0.98);
 }
 
+.meridian-button:disabled {
+  cursor: not-allowed;
+}
+
 .meridian-button--secondary {
-  background: rgba(24, 24, 27, 0.06);
+  background: var(--panel-muted);
   color: var(--foreground);
+}
+
+.meridian-muted-text {
+  color: var(--muted);
+}
+
+.meridian-muted-text-strong {
+  color: var(--muted-strong);
 }
 
 .meridian-prose {
@@ -110,4 +177,41 @@ img {
 
 .meridian-prose img {
   border-radius: 1rem;
+}
+
+.meridian-editor-shell {
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  color: var(--foreground);
+}
+
+.meridian-editor-shell .mdxeditor-toolbar {
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.meridian-editor-shell .mdxeditor-toolbar button,
+.meridian-editor-shell .mdxeditor-toolbar select {
+  color: var(--foreground);
+}
+
+.meridian-editor-shell .mdxeditor-toolbar button:hover,
+.meridian-editor-shell .mdxeditor-toolbar button:focus-visible,
+.meridian-editor-shell .mdxeditor-popup-container,
+.meridian-editor-shell .mdxeditor-select-content {
+  background: var(--panel-strong);
+}
+
+.meridian-editor-shell .mdxeditor-root-contenteditable,
+.meridian-editor-shell [contenteditable='true'] {
+  background: transparent;
+  color: var(--foreground);
+}
+
+.meridian-editor-shell .cm-editor,
+.meridian-editor-shell .cm-scroller,
+.meridian-editor-shell .cm-content,
+.meridian-editor-shell .cm-gutters {
+  background: transparent;
+  color: var(--foreground);
 }

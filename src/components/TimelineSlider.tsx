@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import type { Place } from '@/lib/types';
 
@@ -13,7 +13,6 @@ type TimelineSliderProps = {
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DRAG_STEP_DAYS = 120;
 const WHEEL_STEP_DAYS = 18;
 
 function getMinTime(places: Place[], nowTime: number) {
@@ -103,13 +102,13 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
   return (
     <div className="pointer-events-auto mx-auto w-full max-w-5xl pb-[max(env(safe-area-inset-bottom),0.75rem)]">
       <div className="meridian-panel rounded-[1.75rem] px-4 py-3 md:px-6">
-        <div className="flex items-center justify-between gap-4 text-xs text-zinc-500 md:text-sm">
+        <div className="meridian-muted-text flex items-center justify-between gap-4 text-xs md:text-sm">
           <span>Timeline</span>
           <div className="flex items-center gap-3">
             {canReset ? (
               <button
                 type="button"
-                className="rounded-full bg-black/6 px-3 py-1 text-[11px] text-zinc-700 md:text-xs"
+                className="meridian-button meridian-button--secondary px-3 py-1 text-[11px] md:text-xs"
                 onClick={() => setCursor(nowTime)}
               >
                 回到现在
@@ -121,12 +120,12 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
 
         <div
           ref={trackRef}
-          className="relative mt-3 h-12 touch-none rounded-full bg-black/[0.04] px-3"
+          className="meridian-muted-surface relative mt-3 h-12 touch-none rounded-full px-3"
           onPointerDown={handlePointerDown}
           onWheel={handleWheel}
         >
-          <div className="absolute bottom-2 top-2 right-4 w-px bg-black/25" />
-          <div className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-white/95 px-2 py-1 text-[11px] text-zinc-500 shadow-sm md:text-xs">
+          <div className="absolute bottom-2 top-2 right-4 w-px bg-[var(--border-strong)]" />
+          <div className="meridian-panel-strong meridian-muted-text absolute right-1 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-[11px] shadow-sm md:text-xs">
             Now
           </div>
 
@@ -139,8 +138,8 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
 
               return (
                 <div key={tick.time} className="absolute inset-y-0" style={{ left: `${left}%` }}>
-                  <div className="absolute bottom-3 h-3 w-px bg-black/10" />
-                  <div className="absolute bottom-0 -translate-x-1/2 text-[10px] text-zinc-400 md:text-[11px]">
+                  <div className="absolute bottom-3 h-3 w-px bg-[var(--border)]" />
+                  <div className="meridian-muted-text absolute bottom-0 -translate-x-1/2 text-[10px] md:text-[11px]">
                     {tick.label}
                   </div>
                 </div>
@@ -160,7 +159,7 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
                   className="absolute top-3 h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-white/70"
                   style={{
                     left: `${left}%`,
-                    backgroundColor: point.isLocked ? '#71717a' : '#18181b'
+                    backgroundColor: point.isLocked ? 'var(--marker-muted)' : 'var(--marker)'
                   }}
                 />
               );
@@ -168,7 +167,7 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400 md:text-xs">
+        <div className="meridian-muted-text mt-2 flex items-center justify-between text-[11px] md:text-xs">
           <span>向右拖动可回看更早的记录</span>
           <span>{new Date(cursorTime).toLocaleDateString()}</span>
         </div>

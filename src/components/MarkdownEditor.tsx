@@ -16,6 +16,8 @@ import {
   toolbarPlugin,
   UndoRedo
 } from '@mdxeditor/editor';
+import { useTheme } from '@/components/ThemeProvider';
+import { cn } from '@/lib/cn';
 
 type MarkdownEditorProps = {
   markdown: string;
@@ -23,8 +25,10 @@ type MarkdownEditorProps = {
 };
 
 export function MarkdownEditor({ markdown, onChange }: MarkdownEditorProps) {
+  const { theme } = useTheme();
+
   return (
-    <div className="overflow-hidden rounded-[1.25rem] border border-black/8 bg-white/75">
+    <div className={cn('meridian-editor-shell overflow-hidden rounded-[1.25rem]', theme)}>
       <MDXEditor
         markdown={markdown}
         onChange={onChange}
