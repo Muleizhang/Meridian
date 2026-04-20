@@ -137,7 +137,7 @@ img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 1rem;
   padding: 0.8rem 1rem;
   background: var(--accent);
@@ -145,7 +145,7 @@ img {
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: transform 150ms ease, opacity 150ms ease, background 150ms ease, color 150ms ease;
+  transition: transform 150ms ease, opacity 150ms ease, background 150ms ease, color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .meridian-button:hover {
@@ -163,6 +163,7 @@ img {
 .meridian-button--secondary {
   background: var(--panel-muted);
   color: var(--foreground);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
 .meridian-button--overlay-light {
