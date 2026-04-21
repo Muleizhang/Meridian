@@ -24,6 +24,9 @@ type StoredViewport = {
 };
 
 const VIEWPORT_STORAGE_KEY = 'meridian-map-viewport';
+const DEFAULT_VIEWPORT: StoredViewport = { lat: 31.2304, lng: 121.4737, zoom: 2.2 };
+const SINGLE_PLACE_ZOOM = 4;
+const SELECTED_PLACE_MIN_ZOOM = 4.5;
 
 const getMapStyle = (theme: MapViewProps['theme']) =>
   theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/outdoors-v12';
@@ -54,6 +57,11 @@ const applyMapAtmosphere = (map: mapboxgl.Map, theme: MapViewProps['theme']) => 
   map.setFog(getMapAtmosphere(theme));
 };
 
+function getCurrentViewport(map: mapboxgl.Map): StoredViewport {
+  const center = map.getCenter();
+  return { lat: center.lat, lng: center.lng, zoom: map.getZoom() };
+}
+
 function getStoredViewport(): StoredViewport | null {
   if (typeof window === 'undefined') {
     return null;
@@ -76,14 +84,6 @@ function getStoredViewport(): StoredViewport | null {
   }
 }
 
-function persistViewport(map: mapboxgl.Map) {
-  const center = map.getCenter();
-  window.sessionStorage.setItem(
-    VIEWPORT_STORAGE_KEY,
-    JSON.stringify({ lat: center.lat, lng: center.lng, zoom: map.getZoom() })
-  );
-}
-
 function persistViewportValue(viewport: StoredViewport) {
   if (typeof window === 'undefined') {
     return;
@@ -92,6 +92,36 @@ function persistViewportValue(viewport: StoredViewport) {
   window.sessionStorage.setItem(VIEWPORT_STORAGE_KEY, JSON.stringify(viewport));
 }
 
+function getBoundsViewport(map: mapboxgl.Map, bounds: mapboxgl.LngLatBounds) {
+  const camera = map.cameraForBounds(bounds, { padding: 120, maxZoom: 5 });
+  if (!camera || !camera.center || typeof camera.zoom !== 'number') {
+    return null;
+  }
+
+  const center = mapboxgl.LngLat.convert(camera.center);
+  return { lat: center.lat, lng: center.lng, zoom: camera.zoom } satisfies StoredViewport;
+}
+
+function getFallbackViewport(map: mapboxgl.Map, places: Place[], bounds: mapboxgl.LngLatBounds | null): StoredViewport {
+  if (places.length === 0 || !bounds) {
+    return DEFAULT_VIEWPORT;
+  }
+
+  if (places.length === 1) {
+    const place = places[0];
+    return { lat: place.lat, lng: place.lng, zoom: SINGLE_PLACE_ZOOM };
+  }
+
+  return getBoundsViewport(map, bounds) ?? DEFAULT_VIEWPORT;
+}
+
+function isSameViewport(left: StoredViewport, right: StoredViewport) {
+  return (
+    Math.abs(left.lat - right.lat) < 0.0001
+    && Math.abs(left.lng - right.lng) < 0.0001
+    && Math.abs(left.zoom - right.zoom) < 0.0001
+  );
+}
 
 export function MapView({
   places,
@@ -107,10 +137,11 @@ export function MapView({
   const themeRef = useRef<MapViewProps['theme']>(theme);
   const currentStyleRef = useRef<string | null>(null);
   const markersRef = useRef<Map<number, mapboxgl.Marker>>(new Map());
-  const initialViewportRef = useRef<StoredViewport | null>(null);
   const hasStoredViewportRef = useRef(false);
   const previousSelectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
+  const selectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
   const isPickingCenter = canEdit && pendingCenter !== null;
+  const isPickingCenterRef = useRef(isPickingCenter);
 
   const bounds = useMemo(() => {
     if (places.length === 0) {
@@ -123,23 +154,26 @@ export function MapView({
   }, [places]);
 
   useEffect(() => {
+    selectedPlaceIdRef.current = selectedPlaceId;
+  }, [selectedPlaceId]);
+
+  useEffect(() => {
+    isPickingCenterRef.current = isPickingCenter;
+  }, [isPickingCenter]);
+
+  useEffect(() => {
     if (!containerRef.current || mapRef.current) {
       return;
     }
 
-    const initialTheme = themeRef.current;
     const storedViewport = getStoredViewport();
-    initialViewportRef.current = storedViewport;
     hasStoredViewportRef.current = Boolean(storedViewport);
-    const initialViewport = storedViewport;
-    const style = getMapStyle(initialTheme);
-    currentStyleRef.current = style;
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style,
-      center: initialViewport ? [initialViewport.lng, initialViewport.lat] : [121.4737, 31.2304],
-      zoom: initialViewport?.zoom ?? 2.2,
+      style: getMapStyle(themeRef.current),
+      center: storedViewport ? [storedViewport.lng, storedViewport.lat] : [DEFAULT_VIEWPORT.lng, DEFAULT_VIEWPORT.lat],
+      zoom: storedViewport?.zoom ?? DEFAULT_VIEWPORT.zoom,
       attributionControl: false
     });
 
@@ -148,13 +182,18 @@ export function MapView({
       applyMapAtmosphere(map, themeRef.current);
     };
     const handleMoveEnd = () => {
-      persistViewport(map);
+      if (selectedPlaceIdRef.current || isPickingCenterRef.current) {
+        return;
+      }
+
+      persistViewportValue(getCurrentViewport(map));
+      hasStoredViewportRef.current = true;
     };
 
+    currentStyleRef.current = getMapStyle(themeRef.current);
     map.on('style.load', handleStyleLoad);
     map.on('moveend', handleMoveEnd);
     mapRef.current = map;
-    persistViewport(map);
 
     return () => {
       map.off('style.load', handleStyleLoad);
@@ -209,34 +248,40 @@ export function MapView({
     const previousSelectedPlaceId = previousSelectedPlaceIdRef.current;
     previousSelectedPlaceIdRef.current = selectedPlaceId;
 
-    if (!map || !bounds) {
+    if (!map || !bounds || selectedPlaceId) {
       return;
     }
 
-    if (selectedPlaceId) {
-      return;
+    const storedViewport = getStoredViewport();
+    if (storedViewport) {
+      hasStoredViewportRef.current = true;
     }
 
     if (previousSelectedPlaceId) {
+      const restoreViewport = storedViewport ?? getFallbackViewport(map, places, bounds);
+      const currentViewport = getCurrentViewport(map);
+      if (!isSameViewport(currentViewport, restoreViewport)) {
+        map.easeTo({ center: [restoreViewport.lng, restoreViewport.lat], zoom: restoreViewport.zoom, duration: 700 });
+      }
       return;
     }
 
-    if (hasStoredViewportRef.current) {
+    if (storedViewport) {
       return;
     }
 
-    if (places.length === 1) {
-      const place = places[0];
-      map.easeTo({ center: [place.lng, place.lat], zoom: 4 });
-      return;
+    const fallbackViewport = getFallbackViewport(map, places, bounds);
+    const currentViewport = getCurrentViewport(map);
+    if (!isSameViewport(currentViewport, fallbackViewport)) {
+      map.jumpTo({ center: [fallbackViewport.lng, fallbackViewport.lat], zoom: fallbackViewport.zoom });
     }
-
-    map.fitBounds(bounds, { padding: 120, duration: 0, maxZoom: 5 });
+    persistViewportValue(fallbackViewport);
+    hasStoredViewportRef.current = true;
   }, [bounds, places, selectedPlaceId]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) {
+    if (!map || !selectedPlaceId) {
       return;
     }
 
@@ -245,10 +290,15 @@ export function MapView({
       return;
     }
 
-    const nextZoom = Math.max(map.getZoom(), 4.5);
-    persistViewportValue({ lat: selectedPlace.lat, lng: selectedPlace.lng, zoom: nextZoom });
+    if (!hasStoredViewportRef.current) {
+      const fallbackViewport = getFallbackViewport(map, places, bounds);
+      persistViewportValue(fallbackViewport);
+      hasStoredViewportRef.current = true;
+    }
+
+    const nextZoom = Math.max(map.getZoom(), SELECTED_PLACE_MIN_ZOOM);
     map.easeTo({ center: [selectedPlace.lng, selectedPlace.lat], zoom: nextZoom, duration: 700 });
-  }, [places, selectedPlaceId]);
+  }, [bounds, places, selectedPlaceId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -291,8 +341,10 @@ export function MapView({
       }
 
       markerElement.addEventListener('click', () => {
-        const nextZoom = Math.max(map.getZoom(), 4.5);
-        persistViewportValue({ lat: place.lat, lng: place.lng, zoom: nextZoom });
+        if (!selectedPlaceIdRef.current) {
+          persistViewportValue(getCurrentViewport(map));
+          hasStoredViewportRef.current = true;
+        }
         onSelectPlace(place.id);
       });
 
