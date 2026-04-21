@@ -1,13 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { FormEvent, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 
+function toEditTarget(next: string | null) {
+  if (!next || !next.startsWith('/')) {
+    return '/edit';
+  }
+
+  const [path, query = ''] = next.split('?', 2);
+  const normalizedPath = path === '/' ? '/edit' : path === '/edit' ? '/edit' : null;
+  if (!normalizedPath) {
+    return '/edit';
+  }
+
+  return query ? `${normalizedPath}?${query}` : normalizedPath;
+}
+
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const loginTarget = useMemo(() => toEditTarget(searchParams.get('next')), [searchParams]);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,8 +45,7 @@ export function LoginForm() {
         throw new Error(payload?.error ?? '登录失败');
       }
 
-      router.replace('/edit');
-      router.refresh();
+      router.replace(loginTarget);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : '登录失败');
     } finally {

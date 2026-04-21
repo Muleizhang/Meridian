@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -86,6 +86,11 @@ function filterPlacesByCursor(places: Place[], cursorTime: number) {
 
     return new Date(place.visited_at).getTime() <= cursorTime;
   });
+}
+
+function buildAuthTarget(searchParams: ReadonlyURLSearchParams, destination: '/' | '/edit') {
+  const query = searchParams.toString();
+  return query ? `${destination}?${query}` : destination;
 }
 
 export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescription }: MeridianAppProps) {
@@ -392,6 +397,7 @@ type HeaderProps = {
 
 function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { theme } = useTheme();
   const actionButtonClassName = cn(
     'meridian-button meridian-header-button',
@@ -406,8 +412,7 @@ function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderPro
   const logout = async () => {
     await fetch('/api/auth', { method: 'DELETE' });
     onShowMessage('已登出');
-    router.replace('/');
-    router.refresh();
+    router.replace(buildAuthTarget(searchParams, '/'));
   };
 
   return (
@@ -432,7 +437,7 @@ function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderPro
             登出
           </button>
         ) : (
-          <a href="/login" className={actionButtonClassName}>
+          <a href={`/login?next=${encodeURIComponent(buildAuthTarget(searchParams, '/'))}`} className={actionButtonClassName}>
             登录
           </a>
         )}
