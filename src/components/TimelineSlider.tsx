@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import type { Place } from '@/lib/types';
 
 type TimelineSliderProps = {
@@ -101,10 +100,14 @@ function buildTicks(startTime: number, endTime: number) {
 export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange }: TimelineSliderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef(1);
-  const dragCursorRef = useRef(cursorTime);
+  const isDraggingRef = useRef(false);
+  const animationFrameRef = useRef<number | null>(null);
+  const queuedCursorRef = useRef<number | null>(null);
+  const [displayCursorTime, setDisplayCursorTime] = useState(cursorTime);
+  const [, startTransition] = useTransition();
   const [trackWidth, setTrackWidth] = useState(1);
   const minTime = useMemo(() => getMinTime(places, nowTime), [nowTime, places]);
-  const cursorMonth = useMemo(() => toMonthFloat(cursorTime), [cursorTime]);
+  const cursorMonth = useMemo(() => toMonthFloat(displayCursorTime), [displayCursorTime]);
   const timelinePoints = useMemo<TimelinePoint[]>(
     () =>
       places.map((place) => ({
@@ -114,6 +117,19 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
       })),
     [nowTime, places]
   );
+
+  useEffect(() => {
+    if (isDraggingRef.current) {
+      return;
+    }
+    setDisplayCursorTime(cursorTime);
+  }, [cursorTime]);
+
+  useEffect(() => () => {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     const track = trackRef.current;
@@ -140,8 +156,29 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
   const ticks = useMemo(() => buildTicks(windowStartTime, nowTime), [nowTime, windowStartTime]);
   const labelStep = Math.max(1, Math.ceil(MIN_LABEL_GAP_PX / TIMELINE_MONTH_PX));
 
+  const scheduleCursorSync = (nextCursor: number) => {
+    queuedCursorRef.current = nextCursor;
+    if (animationFrameRef.current !== null) {
+      return;
+    }
+
+    animationFrameRef.current = window.requestAnimationFrame(() => {
+      animationFrameRef.current = null;
+      const queuedCursor = queuedCursorRef.current;
+      if (queuedCursor === null) {
+        return;
+      }
+      queuedCursorRef.current = null;
+      startTransition(() => {
+        onCursorTimeChange(queuedCursor);
+      });
+    });
+  };
+
   const setCursor = (value: number) => {
-    onCursorTimeChange(clamp(value, minTime, nowTime));
+    const nextCursor = clamp(value, minTime, nowTime);
+    setDisplayCursorTime(nextCursor);
+    scheduleCursorSync(nextCursor);
   };
 
   const toLeftPx = (time: number) => {
@@ -152,25 +189,34 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     const width = widthRef.current;
     const startX = event.clientX;
-    const startCursorMonth = toMonthFloat(cursorTime);
-    dragCursorRef.current = cursorTime;
+    const startCursorMonth = toMonthFloat(displayCursorTime);
+    isDraggingRef.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const deltaX = moveEvent.clientX - startX;
       const nextCursorMonth = startCursorMonth - deltaX / TIMELINE_MONTH_PX;
-      const nextCursor = fromMonthFloat(nextCursorMonth);
-      dragCursorRef.current = clamp(nextCursor, minTime, nowTime);
-      onCursorTimeChange(dragCursorRef.current);
+      setCursor(fromMonthFloat(nextCursorMonth));
     };
 
     const handlePointerUp = () => {
+      isDraggingRef.current = false;
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
+      if (queuedCursorRef.current !== null) {
+        const queuedCursor = queuedCursorRef.current;
+        queuedCursorRef.current = null;
+        if (animationFrameRef.current !== null) {
+          window.cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+        }
+        onCursorTimeChange(queuedCursor);
+      }
     };
 
     if (width <= 0) {
+      isDraggingRef.current = false;
       return;
     }
 
@@ -226,9 +272,8 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
               }
 
               return (
-                <motion.div
+                <div
                   key={point.id}
-                  layout
                   className="absolute top-3 h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-white/70"
                   style={{
                     left,
