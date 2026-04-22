@@ -14,12 +14,15 @@ type TimelinePoint = {
   id: number;
   time: number;
   isLocked: boolean;
+  title: string;
+  hasDate: boolean;
 };
 
 const WHEEL_STEP_MONTHS = 1;
 const TIMELINE_MONTH_PX = 64;
 const TRACK_SIDE_PADDING = 20;
 const MIN_LABEL_GAP_PX = 84;
+const TRACK_INNER_PADDING_PX = 12;
 
 function getMinTime(places: Place[], nowTime: number) {
   const datedTimes = places
@@ -83,6 +86,14 @@ function formatTickLabel(time: number) {
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function formatPointDate(time: number) {
+  const date = new Date(time);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}.${month}.${day}`;
+}
+
 function buildTicks(startTime: number, endTime: number) {
   const ticks = [] as Array<{ time: number; label: string }>;
   const startMonth = startOfMonth(startTime);
@@ -106,6 +117,7 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
   const [displayCursorTime, setDisplayCursorTime] = useState(cursorTime);
   const [, startTransition] = useTransition();
   const [trackWidth, setTrackWidth] = useState(1);
+  const [activePointId, setActivePointId] = useState<number | null>(null);
   const minTime = useMemo(() => getMinTime(places, nowTime), [nowTime, places]);
   const cursorMonth = useMemo(() => toMonthFloat(displayCursorTime), [displayCursorTime]);
   const timelinePoints = useMemo<TimelinePoint[]>(
@@ -113,9 +125,15 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
       places.map((place) => ({
         id: place.id,
         time: place.visited_at ? new Date(place.visited_at).getTime() : nowTime,
-        isLocked: place.is_locked
+        isLocked: place.is_locked,
+        title: place.title?.trim() ? place.title : '未命名记忆点',
+        hasDate: Boolean(place.visited_at)
       })),
     [nowTime, places]
+  );
+  const activePoint = useMemo(
+    () => (activePointId === null ? null : timelinePoints.find((point) => point.id === activePointId) ?? null),
+    [activePointId, timelinePoints]
   );
 
   useEffect(() => {
@@ -187,6 +205,7 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    setActivePointId(null);
     const width = widthRef.current;
     const startX = event.clientX;
     const startCursorMonth = toMonthFloat(displayCursorTime);
@@ -232,9 +251,31 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
     setCursor(nextCursor);
   };
 
+  const activePointLeft = activePoint ? toLeftPx(activePoint.time) : null;
+  const isActivePointVisible =
+    activePointLeft !== null && activePointLeft >= 0 && activePointLeft <= trackWidth + TRACK_SIDE_PADDING * 2;
+
   return (
     <div className="pointer-events-auto mx-auto w-full max-w-5xl pb-[max(var(--safe-area-bottom),0.75rem)]">
       <div className="meridian-panel rounded-[1.75rem] px-4 py-3 md:px-6">
+        <div className="relative">
+          {activePoint && isActivePointVisible ? (
+            <div
+              className="meridian-panel-strong pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-xl border border-[var(--border)] px-2.5 py-1 text-[11px] shadow-lg md:text-xs"
+              style={{ left: (activePointLeft ?? 0) + TRACK_INNER_PADDING_PX, top: -6 }}
+            >
+              <div className="font-medium">{activePoint.title}</div>
+              {activePoint.hasDate ? (
+                <div className="meridian-muted-text mt-0.5 text-[10px] md:text-[11px]">
+                  {formatPointDate(activePoint.time)}
+                </div>
+              ) : null}
+              <div
+                className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-[var(--border)] bg-[var(--panel-strong)]"
+                aria-hidden
+              />
+            </div>
+          ) : null}
         <div
           ref={trackRef}
           className="meridian-muted-surface relative h-12 touch-none overflow-hidden rounded-full px-3"
@@ -271,18 +312,45 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
                 return null;
               }
 
+              const isActive = activePointId === point.id;
+
               return (
-                <div
+                <button
                   key={point.id}
-                  className="absolute top-3 h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-white/70"
-                  style={{
-                    left,
-                    backgroundColor: point.isLocked ? 'var(--marker-muted)' : 'var(--marker)'
+                  type="button"
+                  aria-label={point.hasDate ? `${point.title} · ${formatPointDate(point.time)}` : point.title}
+                  className={`absolute flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full transition-transform ${
+                    isActive ? 'scale-110' : ''
+                  }`}
+                  style={{ left, top: 5 }}
+                  onPointerEnter={(event) => {
+                    if (event.pointerType === 'mouse') {
+                      setActivePointId(point.id);
+                    }
                   }}
-                />
+                  onPointerLeave={(event) => {
+                    if (event.pointerType === 'mouse') {
+                      setActivePointId((current) => (current === point.id ? null : current));
+                    }
+                  }}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    setActivePointId(point.id);
+                  }}
+                  onFocus={() => setActivePointId(point.id)}
+                  onBlur={() => setActivePointId((current) => (current === point.id ? null : current))}
+                >
+                  <span
+                    className="block h-2.5 w-2.5 rounded-full border border-white/70 shadow-sm"
+                    style={{
+                      backgroundColor: point.isLocked ? 'var(--marker-muted)' : 'var(--marker)'
+                    }}
+                  />
+                </button>
               );
             })}
           </div>
+        </div>
         </div>
       </div>
     </div>
