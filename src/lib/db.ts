@@ -21,14 +21,45 @@ const PLACE_COLUMNS = `
   created_at
 `;
 
+type PlaceRow = Omit<Place, 'visited_at' | 'created_at'> & {
+  visited_at: string | Date | null;
+  created_at: string | Date;
+};
+
+function toDateOnly(value: string | Date | null) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : value;
+}
+
+function toDateTimeString(value: string | Date) {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function normalizePlace(row: PlaceRow): Place {
+  return {
+    ...row,
+    visited_at: toDateOnly(row.visited_at),
+    created_at: toDateTimeString(row.created_at)
+  };
+}
+
 export async function listPlaces() {
   const rows = await getSql().query(`SELECT ${PLACE_COLUMNS} FROM places ORDER BY COALESCE(visited_at, created_at::date) DESC, created_at DESC`);
-  return rows as Place[];
+  return (rows as PlaceRow[]).map(normalizePlace);
 }
 
 export async function getPlaceById(id: number) {
   const rows = await getSql().query(`SELECT ${PLACE_COLUMNS} FROM places WHERE id = $1 LIMIT 1`, [id]);
-  return (rows as Place[])[0] ?? null;
+  const place = (rows as PlaceRow[])[0];
+  return place ? normalizePlace(place) : null;
 }
 
 export async function createPlace(input: CreatePlaceInput) {
@@ -59,7 +90,7 @@ export async function createPlace(input: CreatePlaceInput) {
     ]
   );
 
-  return (rows as Place[])[0];
+  return normalizePlace((rows as PlaceRow[])[0]);
 }
 
 export async function updatePlace(id: number, input: UpdatePlaceInput) {
@@ -88,7 +119,8 @@ export async function updatePlace(id: number, input: UpdatePlaceInput) {
     ]
   );
 
-  return (rows as Place[])[0] ?? null;
+  const place = (rows as PlaceRow[])[0];
+  return place ? normalizePlace(place) : null;
 }
 
 export async function deletePlace(id: number) {

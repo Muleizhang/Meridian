@@ -52,6 +52,43 @@ type PlacePayload = {
   is_locked: boolean;
 };
 
+type DateInputSource = string | Date | null | undefined;
+
+function toLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function toDateInputValue(value: DateInputSource) {
+  if (!value) {
+    return '';
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+  if (match) {
+    return match[0];
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
+function formatVisitedDate(value: DateInputSource) {
+  const dateValue = toDateInputValue(value);
+  if (!dateValue) {
+    return '未填写日期';
+  }
+
+  const [year, month, day] = dateValue.split('-');
+  return `${Number(year)}/${Number(month)}/${Number(day)}`;
+}
+
 function toFormState(place?: Place) {
   return {
     title: place?.title ?? '',
@@ -59,7 +96,7 @@ function toFormState(place?: Place) {
     images: place?.images ?? [],
     thumbnails: place?.thumbnails ?? [],
     author: place?.author ?? '',
-    visited_at: place?.visited_at ?? new Date().toISOString().slice(0, 10),
+    visited_at: toDateInputValue(place?.visited_at) || toLocalDateInputValue(),
     is_locked: place?.is_locked ?? false
   };
 }
@@ -512,7 +549,7 @@ function DetailPanel({ place, canEdit, isDeleting, onClose, onEdit, onDelete, on
           <div>
             <h2 className="text-2xl font-semibold leading-tight">{place.title}</h2>
             <div className="meridian-muted-text mt-2 text-sm">
-              {place.visited_at ? new Date(place.visited_at).toLocaleDateString() : '未填写日期'}
+              {formatVisitedDate(place.visited_at)}
               {place.author ? <span className="ml-2">— by {place.author}</span> : null}
             </div>
           </div>
