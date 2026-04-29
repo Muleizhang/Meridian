@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation';
@@ -186,7 +186,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     messageTimerRef.current = window.setTimeout(() => setMessage(null), 3200);
   };
 
-  const updateQueryForPlace = (placeId: number | null) => {
+  const updateQueryForPlace = useCallback((placeId: number | null) => {
     const next = new URLSearchParams(searchParams.toString());
     if (placeId) {
       next.set('place', String(placeId));
@@ -195,7 +195,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     }
     const query = next.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  };
+  }, [pathname, router, searchParams]);
 
   const selectPlace = (placeId: number) => {
     setEditorState(null);
@@ -204,12 +204,37 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     updateQueryForPlace(placeId);
   };
 
-  const closePanels = () => {
+  const closePanels = useCallback(() => {
     setSelectedPlaceId(null);
     setEditorState(null);
     setIsPickerOpen(false);
     updateQueryForPlace(null);
-  };
+  }, [updateQueryForPlace]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) {
+        return;
+      }
+
+      if (fullscreenImage) {
+        setFullscreenImage(null);
+        return;
+      }
+
+      if (editorState) {
+        setEditorState(null);
+        return;
+      }
+
+      if (selectedPlaceId || isPickerOpen) {
+        closePanels();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closePanels, editorState, fullscreenImage, isPickerOpen, selectedPlaceId]);
 
   const beginCreate = () => {
     setSelectedPlaceId(null);
