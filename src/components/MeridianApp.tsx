@@ -253,7 +253,15 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
   };
 
   const uploadFile = async (file: File) => {
-    const { original, thumbnail } = await createImageVariants(file);
+    let variants: Awaited<ReturnType<typeof createImageVariants>>;
+    try {
+      variants = await createImageVariants(file);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '图片处理失败';
+      throw new Error(`图片处理失败：${message}`);
+    }
+
+    const { original, thumbnail } = variants;
 
     const [originalTarget, thumbTarget] = await Promise.all([
       requestJson<{ uploadUrl: string; fileUrl: string }>('/api/upload', {
@@ -268,24 +276,32 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
       })
     ]);
 
-    await Promise.all([
-      fetch(originalTarget.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': original.type },
-        body: original
-      }),
-      fetch(thumbTarget.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': thumbnail.type },
-        body: thumbnail
-      })
-    ]).then((responses) => {
-      responses.forEach((response) => {
-        if (!response.ok) {
-          throw new Error('上传失败');
-        }
-      });
-    });
+    const uploadTasks = [
+      { label: '原图', target: originalTarget, file: original },
+      { label: '缩略图', target: thumbTarget, file: thumbnail }
+    ];
+
+    let uploadResponses: Array<{ label: string; response: Response }>;
+    try {
+      uploadResponses = await Promise.all(
+        uploadTasks.map(async ({ label, target, file }) => ({
+          label,
+          response: await fetch(target.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          })
+        }))
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '网络请求失败';
+      throw new Error(`上传失败：${message}`);
+    }
+
+    const failedUpload = uploadResponses.find(({ response }) => !response.ok);
+    if (failedUpload) {
+      throw new Error(`${failedUpload.label}上传失败（HTTP ${failedUpload.response.status}）`);
+    }
 
     return {
       image: originalTarget.fileUrl,
@@ -408,6 +424,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
             isSaving={isSaving}
             onClose={() => setEditorState(null)}
             onUploadFile={uploadFile}
+            onUploadError={showMessage}
             onSubmit={async (payload) => {
               setIsSaving(true);
               try {
@@ -654,10 +671,11 @@ type EditPanelProps = {
   isSaving: boolean;
   onClose: () => void;
   onUploadFile: (file: File) => Promise<{ image: string; thumbnail: string }>;
+  onUploadError: (message: string) => void;
   onSubmit: (payload: PlacePayload) => Promise<void>;
 };
 
-function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, onUploadFile, onSubmit }: EditPanelProps) {
+function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, onUploadFile, onUploadError, onSubmit }: EditPanelProps) {
   const initial = toFormState(place ?? undefined);
   const [title, setTitle] = useState(initial.title);
   const [content, setContent] = useState(initial.content);
@@ -668,6 +686,7 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
   const [isLocked, setIsLocked] = useState(initial.is_locked);
   const [isUploading, setIsUploading] = useState(false);
   const [isDraggingImages, setIsDraggingImages] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
 
   useEffect(() => {
@@ -688,10 +707,15 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
     }
 
     setIsUploading(true);
+    setUploadError(null);
     try {
       const uploaded = await Promise.all(files.map((file) => onUploadFile(file)));
       setImages((current) => [...current, ...uploaded.map((item) => item.image)]);
       setThumbnails((current) => [...current, ...uploaded.map((item) => item.thumbnail)]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '上传失败，请稍后重试';
+      setUploadError(message);
+      onUploadError(message);
     } finally {
       setIsUploading(false);
     }
@@ -822,6 +846,7 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
                   }}
                 />
               </label>
+              {uploadError ? <div className="mt-2 text-xs text-red-600 dark:text-red-300">{uploadError}</div> : null}
               {thumbnails.length > 0 ? (
                 <div className="mt-3 grid grid-cols-3 gap-3">
                   {thumbnails.map((thumbnail, index) => (
