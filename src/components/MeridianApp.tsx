@@ -177,6 +177,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     () => Array.from(new Set(places.map((place) => place.author).filter(Boolean) as string[])),
     [places]
   );
+  const isTimelineVisible = !selectedPlace && !editorState;
 
   const showMessage = (text: string) => {
     setMessage(text);
@@ -353,12 +354,24 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
       <div className="pointer-events-none absolute inset-0 flex flex-col px-[max(0.75rem,var(--safe-area-left))] pt-[max(0.75rem,var(--safe-area-top))] pr-[max(0.75rem,var(--safe-area-right))] md:p-6">
         <Header canEdit={canEdit} onCreate={beginCreate} onShowMessage={showMessage} siteDescription={siteDescription} />
         <div className="flex-1" />
-        <TimelineSlider
-          places={places}
-          cursorTime={timelineCursorTime}
-          nowTime={nowTime}
-          onCursorTimeChange={setTimelineCursorTime}
-        />
+        <AnimatePresence initial={false}>
+          {isTimelineVisible ? (
+            <motion.div
+              key="timeline"
+              initial={{ opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 28 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 24 }}
+            >
+              <TimelineSlider
+                places={places}
+                cursorTime={timelineCursorTime}
+                nowTime={nowTime}
+                onCursorTimeChange={setTimelineCursorTime}
+              />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
 
       <CreatePinOverlay
