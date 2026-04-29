@@ -123,6 +123,28 @@ function isSameViewport(left: StoredViewport, right: StoredViewport) {
   );
 }
 
+function getPlaceStackTime(place: Place) {
+  const time = new Date(place.visited_at ?? place.created_at).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getMarkerZIndexByPlaceId(places: Place[]) {
+  const nowTime = Date.now();
+  const sortedPlaces = [...places].sort((left, right) => {
+    const leftTime = getPlaceStackTime(left);
+    const rightTime = getPlaceStackTime(right);
+    const distanceDelta = Math.abs(nowTime - rightTime) - Math.abs(nowTime - leftTime);
+
+    if (distanceDelta !== 0) {
+      return distanceDelta;
+    }
+
+    return leftTime - rightTime || left.id - right.id;
+  });
+
+  return new Map(sortedPlaces.map((place, index) => [place.id, index + 1]));
+}
+
 export function MapView({
   places,
   selectedPlaceId,
@@ -308,6 +330,7 @@ export function MapView({
 
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current.clear();
+    const markerZIndexByPlaceId = getMarkerZIndexByPlaceId(places);
 
     places.forEach((place) => {
       const isHiddenLockedPlace = isSanitizedLockedPlace(place);
@@ -315,6 +338,7 @@ export function MapView({
       markerElement.type = 'button';
       markerElement.className = 'group relative border-0 bg-transparent p-0';
       markerElement.setAttribute('aria-label', place.title || 'place marker');
+      markerElement.style.zIndex = String(markerZIndexByPlaceId.get(place.id) ?? 1);
 
       const bubble = document.createElement('div');
       bubble.className = [
