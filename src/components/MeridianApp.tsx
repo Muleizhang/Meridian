@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation';
@@ -667,6 +667,8 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
   const [visitedAt, setVisitedAt] = useState(initial.visited_at);
   const [isLocked, setIsLocked] = useState(initial.is_locked);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDraggingImages, setIsDraggingImages] = useState(false);
+  const dragDepthRef = useRef(0);
 
   useEffect(() => {
     const next = toFormState(place ?? undefined);
@@ -679,19 +681,57 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
     setIsLocked(next.is_locked);
   }, [place]);
 
-  const handleUploadFiles = async (fileList: FileList | null) => {
-    if (!fileList?.length) {
+  const handleUploadFiles = async (fileList: FileList | File[] | null) => {
+    const files = fileList ? Array.from(fileList).filter((file) => file.type.startsWith('image/')) : [];
+    if (!files.length) {
       return;
     }
 
     setIsUploading(true);
     try {
-      const uploaded = await Promise.all(Array.from(fileList).map((file) => onUploadFile(file)));
+      const uploaded = await Promise.all(files.map((file) => onUploadFile(file)));
       setImages((current) => [...current, ...uploaded.map((item) => item.image)]);
       setThumbnails((current) => [...current, ...uploaded.map((item) => item.thumbnail)]);
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const hasDraggedFiles = (dataTransfer: DataTransfer) =>
+    Array.from(dataTransfer.items).some((item) => item.kind === 'file' && (!item.type || item.type.startsWith('image/')));
+
+  const handleImageDragEnter = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!hasDraggedFiles(event.dataTransfer)) {
+      return;
+    }
+
+    dragDepthRef.current += 1;
+    setIsDraggingImages(true);
+  };
+
+  const handleImageDragOver = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleImageDragLeave = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(dragDepthRef.current - 1, 0);
+    if (dragDepthRef.current === 0) {
+      setIsDraggingImages(false);
+    }
+  };
+
+  const handleImageDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDraggingImages(false);
+    void handleUploadFiles(event.dataTransfer.files);
   };
 
   const removeImage = (index: number) => {
@@ -760,8 +800,17 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
                 <span>图片</span>
                 <span>{isUploading ? '上传中…' : `${images.length} 张`}</span>
               </div>
-              <label className="meridian-soft-surface meridian-muted-text block cursor-pointer rounded-[1.25rem] border-dashed px-4 py-6 text-center text-sm">
-                粘贴、拖拽或点击上传图片
+              <label
+                className={cn(
+                  'meridian-soft-surface meridian-muted-text block cursor-pointer rounded-[1.25rem] border-dashed px-4 py-6 text-center text-sm transition-[background-color,border-color,box-shadow]',
+                  isDraggingImages && 'border-[var(--border-strong)] bg-[var(--panel-strong)] shadow-[0_0_0_2px_var(--accent)]'
+                )}
+                onDragEnter={handleImageDragEnter}
+                onDragOver={handleImageDragOver}
+                onDragLeave={handleImageDragLeave}
+                onDrop={handleImageDrop}
+              >
+                {isDraggingImages ? '松开以上传图片' : '粘贴、拖拽或点击上传图片'}
                 <input
                   type="file"
                   accept="image/*"
