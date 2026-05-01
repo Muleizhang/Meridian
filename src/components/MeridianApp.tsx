@@ -43,6 +43,8 @@ type EditorState =
   | null;
 
 type PlacePayload = {
+  lat: number;
+  lng: number;
   title: string;
   content: string;
   images: string[];
@@ -140,6 +142,8 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
   const [editorState, setEditorState] = useState<EditorState>(null);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [pendingCenter, setPendingCenter] = useState({ lat: 31.2304, lng: 121.4737 });
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [locationAdjustOrigin, setLocationAdjustOrigin] = useState<{ lat: number; lng: number } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -178,6 +182,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     [places]
   );
   const isTimelineVisible = !selectedPlace && !editorState;
+  const isPickingLocation = isPickerOpen || isEditingLocation;
 
   const showMessage = (text: string) => {
     setMessage(text);
@@ -201,6 +206,8 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
   const selectPlace = (placeId: number) => {
     setEditorState(null);
     setIsPickerOpen(false);
+    setIsEditingLocation(false);
+    setLocationAdjustOrigin(null);
     setSelectedPlaceId(placeId);
     updateQueryForPlace(placeId);
   };
@@ -209,8 +216,28 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     setSelectedPlaceId(null);
     setEditorState(null);
     setIsPickerOpen(false);
+    setIsEditingLocation(false);
+    setLocationAdjustOrigin(null);
     updateQueryForPlace(null);
   }, [updateQueryForPlace]);
+
+  const cancelLocationAdjust = useCallback(() => {
+    if (locationAdjustOrigin) {
+      setPendingCenter(locationAdjustOrigin);
+    } else if (editorState?.mode === 'edit') {
+      const place = places.find((place) => place.id === editorState.placeId);
+      if (place) {
+        setPendingCenter({ lat: place.lat, lng: place.lng });
+      }
+    }
+    setLocationAdjustOrigin(null);
+    setIsEditingLocation(false);
+  }, [editorState, locationAdjustOrigin, places]);
+
+  const confirmLocationAdjust = () => {
+    setLocationAdjustOrigin(null);
+    setIsEditingLocation(false);
+  };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -223,7 +250,13 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
         return;
       }
 
+      if (isEditingLocation) {
+        cancelLocationAdjust();
+        return;
+      }
+
       if (editorState) {
+        setIsEditingLocation(false);
         setEditorState(null);
         return;
       }
@@ -235,11 +268,13 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [closePanels, editorState, fullscreenImage, isPickerOpen, selectedPlaceId]);
+  }, [cancelLocationAdjust, closePanels, editorState, fullscreenImage, isEditingLocation, isPickerOpen, selectedPlaceId]);
 
   const beginCreate = () => {
     setSelectedPlaceId(null);
     setEditorState(null);
+    setIsEditingLocation(false);
+    setLocationAdjustOrigin(null);
     setIsPickerOpen(true);
   };
 
@@ -249,6 +284,12 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
   };
 
   const beginEdit = (placeId: number) => {
+    const place = places.find((place) => place.id === placeId);
+    if (place) {
+      setPendingCenter({ lat: place.lat, lng: place.lng });
+    }
+    setIsEditingLocation(false);
+    setLocationAdjustOrigin(null);
     setEditorState({ mode: 'edit', placeId });
   };
 
@@ -309,7 +350,7 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     };
   };
 
-  const createPlace = async (payload: PlacePayload & { lat: number; lng: number }) => {
+  const createPlace = async (payload: PlacePayload) => {
     const result = await requestJson<{ place: Place }>('/api/places', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -320,6 +361,8 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     setTimelineCursorTime(Date.now());
     setSelectedPlaceId(result.place.id);
     setEditorState(null);
+    setIsEditingLocation(false);
+    setLocationAdjustOrigin(null);
     updateQueryForPlace(result.place.id);
     showMessage('地点已创建');
   };
@@ -332,8 +375,11 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
     });
 
     setPlaces((current) => current.map((place) => (place.id === placeId ? result.place : place)));
+    setPendingCenter({ lat: result.place.lat, lng: result.place.lng });
     setSelectedPlaceId(placeId);
     setEditorState(null);
+    setIsEditingLocation(false);
+    setLocationAdjustOrigin(null);
     showMessage('地点已更新');
   };
 
@@ -360,7 +406,8 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
       <MapView
         places={visiblePlaces}
         selectedPlaceId={selectedPlaceId}
-        pendingCenter={isPickerOpen ? pendingCenter : null}
+        pendingCenter={isPickingLocation ? pendingCenter : null}
+        focusPendingCenter={isEditingLocation}
         canEdit={canEdit}
         theme={theme}
         onCenterChange={setPendingCenter}
@@ -391,14 +438,27 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
       </div>
 
       <CreatePinOverlay
-        open={isPickerOpen}
+        open={isPickingLocation}
+        mode={isEditingLocation ? 'edit' : 'create'}
         center={pendingCenter}
-        onCancel={() => setIsPickerOpen(false)}
-        onConfirm={confirmCreatePin}
+        onCancel={() => {
+          if (isEditingLocation) {
+            cancelLocationAdjust();
+          } else {
+            setIsPickerOpen(false);
+          }
+        }}
+        onConfirm={() => {
+          if (isEditingLocation) {
+            confirmLocationAdjust();
+          } else {
+            confirmCreatePin();
+          }
+        }}
       />
 
       <AnimatePresence>
-        {selectedPlace ? (
+        {selectedPlace && !editorState ? (
           <DetailPanel
             key={`view-${selectedPlace.id}`}
             place={selectedPlace}
@@ -420,9 +480,29 @@ export function MeridianApp({ initialPlaces, canEdit, focusPlaceId, siteDescript
             lat={editorState.mode === 'create' ? editorState.lat : undefined}
             lng={editorState.mode === 'create' ? editorState.lng : undefined}
             place={editorState.mode === 'edit' ? places.find((place) => place.id === editorState.placeId) ?? null : null}
+            selectedLocation={editorState.mode === 'edit' ? pendingCenter : null}
+            isAdjustingLocation={isEditingLocation}
             authorOptions={authorOptions}
             isSaving={isSaving}
-            onClose={() => setEditorState(null)}
+            onClose={() => {
+              setIsEditingLocation(false);
+              setLocationAdjustOrigin(null);
+              setEditorState(null);
+            }}
+            onAdjustLocation={() => {
+              setLocationAdjustOrigin(pendingCenter);
+              setIsEditingLocation(true);
+            }}
+            onResetLocation={() => {
+              const place = editorState.mode === 'edit'
+                ? places.find((place) => place.id === editorState.placeId)
+                : null;
+              if (place) {
+                setPendingCenter({ lat: place.lat, lng: place.lng });
+              }
+              setLocationAdjustOrigin(null);
+              setIsEditingLocation(false);
+            }}
             onUploadFile={uploadFile}
             onUploadError={showMessage}
             onSubmit={async (payload) => {
@@ -540,12 +620,13 @@ function Header({ canEdit, onCreate, onShowMessage, siteDescription }: HeaderPro
 
 type CreatePinOverlayProps = {
   open: boolean;
+  mode: 'create' | 'edit';
   center: { lat: number; lng: number };
   onCancel: () => void;
   onConfirm: () => void;
 };
 
-function CreatePinOverlay({ open, center, onCancel, onConfirm }: CreatePinOverlayProps) {
+function CreatePinOverlay({ open, mode, center, onCancel, onConfirm }: CreatePinOverlayProps) {
   return (
     <AnimatePresence>
       {open ? (
@@ -561,7 +642,9 @@ function CreatePinOverlay({ open, center, onCancel, onConfirm }: CreatePinOverla
             exit={{ opacity: 0, y: 24 }}
             className="meridian-panel absolute inset-x-3 bottom-[calc(max(var(--safe-area-bottom),0.75rem)+6rem)] z-30 rounded-[1.75rem] px-4 py-4 md:inset-x-auto md:left-1/2 md:w-[420px] md:-translate-x-1/2"
           >
-            <div className="text-sm font-medium">拖动地图来选择位置</div>
+            <div className="text-sm font-medium">
+              {mode === 'create' ? '拖动地图来选择位置' : '拖动地图来调整位置'}
+            </div>
             <div className="meridian-muted-text mt-2 text-xs">
               纬度 {center.lat.toFixed(5)}，经度 {center.lng.toFixed(5)}
             </div>
@@ -570,7 +653,7 @@ function CreatePinOverlay({ open, center, onCancel, onConfirm }: CreatePinOverla
                 取消
               </button>
               <button type="button" className="meridian-button flex-1" onClick={onConfirm}>
-                确认
+                {mode === 'create' ? '确认' : '完成'}
               </button>
             </div>
           </motion.div>
@@ -667,16 +750,39 @@ type EditPanelProps = {
   place: Place | null;
   lat?: number;
   lng?: number;
+  selectedLocation: { lat: number; lng: number } | null;
+  isAdjustingLocation: boolean;
   authorOptions: string[];
   isSaving: boolean;
   onClose: () => void;
+  onAdjustLocation: () => void;
+  onResetLocation: () => void;
   onUploadFile: (file: File) => Promise<{ image: string; thumbnail: string }>;
   onUploadError: (message: string) => void;
   onSubmit: (payload: PlacePayload) => Promise<void>;
 };
 
-function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, onUploadFile, onUploadError, onSubmit }: EditPanelProps) {
+function EditPanel({
+  mode,
+  place,
+  lat,
+  lng,
+  selectedLocation,
+  isAdjustingLocation,
+  authorOptions,
+  isSaving,
+  onClose,
+  onAdjustLocation,
+  onResetLocation,
+  onUploadFile,
+  onUploadError,
+  onSubmit
+}: EditPanelProps) {
   const initial = toFormState(place ?? undefined);
+  const currentLocation = selectedLocation ?? (place ? { lat: place.lat, lng: place.lng } : { lat: lat ?? 0, lng: lng ?? 0 });
+  const hasMovedLocation = place
+    ? Math.abs(currentLocation.lat - place.lat) > 0.00001 || Math.abs(currentLocation.lng - place.lng) > 0.00001
+    : false;
   const [title, setTitle] = useState(initial.title);
   const [content, setContent] = useState(initial.content);
   const [images, setImages] = useState<string[]>(initial.images);
@@ -766,10 +872,13 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
   return (
     <motion.aside
       initial={{ opacity: 0, x: 32, y: 12 }}
-      animate={{ opacity: 1, x: 0, y: 0 }}
+      animate={isAdjustingLocation ? { opacity: 0, x: 32, y: 12 } : { opacity: 1, x: 0, y: 0 }}
       exit={{ opacity: 0, x: 32, y: 12 }}
       transition={{ type: 'spring', stiffness: 220, damping: 24 }}
-      className="meridian-panel absolute inset-x-3 bottom-[calc(max(var(--safe-area-bottom),0.75rem)+6rem)] top-[calc(max(var(--safe-area-top),0.75rem)+4.75rem)] z-50 rounded-[2rem] p-5 md:inset-x-auto md:bottom-6 md:right-6 md:top-24 md:w-[420px]"
+      className={cn(
+        'meridian-panel absolute inset-x-3 bottom-[calc(max(var(--safe-area-bottom),0.75rem)+6rem)] top-[calc(max(var(--safe-area-top),0.75rem)+4.75rem)] z-50 rounded-[2rem] p-5 md:inset-x-auto md:bottom-6 md:right-6 md:top-24 md:w-[420px]',
+        isAdjustingLocation && 'pointer-events-none'
+      )}
     >
       <div className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-3">
@@ -777,8 +886,8 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
             <h2 className="text-2xl font-semibold">{mode === 'create' ? '新建记录' : '编辑记录'}</h2>
             <div className="meridian-muted-text mt-2 text-xs">
               {mode === 'create'
-                ? `纬度 ${lat?.toFixed(5)}，经度 ${lng?.toFixed(5)}`
-                : `位置已固定：${place?.lat.toFixed(5)}, ${place?.lng.toFixed(5)}`}
+                ? `纬度 ${currentLocation.lat.toFixed(5)}，经度 ${currentLocation.lng.toFixed(5)}`
+                : `纬度 ${currentLocation.lat.toFixed(5)}，经度 ${currentLocation.lng.toFixed(5)}`}
             </div>
           </div>
           <button
@@ -792,6 +901,26 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
 
         <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
           <div className="space-y-4">
+            {mode === 'edit' ? (
+              <div className="meridian-soft-surface rounded-[1.25rem] px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="meridian-muted-text-strong text-sm">位置</div>
+                    <div className="meridian-muted-text mt-1 text-xs">
+                      {isAdjustingLocation ? '拖动地图后点完成' : hasMovedLocation ? '位置已调整，保存后生效' : '可重新选择记忆点位置'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="meridian-button meridian-button--secondary px-3 py-2 text-sm"
+                    onClick={isAdjustingLocation ? onResetLocation : onAdjustLocation}
+                  >
+                    {isAdjustingLocation ? '撤销' : '调整'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <label className="block">
               <div className="meridian-muted-text-strong mb-2 text-sm">标题</div>
               <input className="meridian-input" value={title} onChange={(event) => setTitle(event.target.value)} />
@@ -877,6 +1006,8 @@ function EditPanel({ mode, place, lat, lng, authorOptions, isSaving, onClose, on
             disabled={isSaving || isUploading || !title.trim()}
             onClick={() =>
               void onSubmit({
+                lat: currentLocation.lat,
+                lng: currentLocation.lng,
                 title: title.trim(),
                 content,
                 images,

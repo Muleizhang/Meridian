@@ -78,8 +78,8 @@ export async function createPlace(input: CreatePlaceInput) {
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL)
     RETURNING ${PLACE_COLUMNS}`,
     [
-      input.lat,
-      input.lng,
+      input.lat ?? null,
+      input.lng ?? null,
       input.title,
       input.content,
       input.images,
@@ -97,17 +97,21 @@ export async function updatePlace(id: number, input: UpdatePlaceInput) {
   const rows = await getSql().query(
     `UPDATE places
     SET
-      title = $1,
-      content = $2,
-      images = $3,
-      thumbnails = $4,
-      author = $5,
-      visited_at = $6,
-      is_locked = $7,
-      share_token = CASE WHEN $7 THEN share_token ELSE NULL END
-    WHERE id = $8
+      lat = COALESCE($1, lat),
+      lng = COALESCE($2, lng),
+      title = $3,
+      content = $4,
+      images = $5,
+      thumbnails = $6,
+      author = $7,
+      visited_at = $8,
+      is_locked = $9,
+      share_token = CASE WHEN $9 THEN share_token ELSE NULL END
+    WHERE id = $10
     RETURNING ${PLACE_COLUMNS}`,
     [
+      input.lat,
+      input.lng,
       input.title,
       input.content,
       input.images,

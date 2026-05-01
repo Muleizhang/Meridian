@@ -30,7 +30,7 @@ export type CreatePlaceInput = {
   is_locked: boolean;
 };
 
-export type UpdatePlaceInput = Omit<CreatePlaceInput, 'lat' | 'lng'>;
+export type UpdatePlaceInput = Omit<CreatePlaceInput, 'lat' | 'lng'> & Partial<Pick<CreatePlaceInput, 'lat' | 'lng'>>;
 
 export type UploadIntent = 'original' | 'thumb';
 

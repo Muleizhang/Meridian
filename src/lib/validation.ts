@@ -17,15 +17,7 @@ const placeBaseSchema = z.object({
   is_locked: z.boolean().default(false)
 });
 
-const updatePlaceBaseSchema = z.object({
-  title: z.string().trim().min(1),
-  content: z.string().default(''),
-  images: z.array(z.string().url()).default([]),
-  thumbnails: z.array(z.string().url()).default([]),
-  author: nullableTrimmedString.nullable().optional(),
-  visited_at: z.string().date().nullable().optional(),
-  is_locked: z.boolean().default(false)
-});
+const updatePlaceBaseSchema = placeBaseSchema.partial({ lat: true, lng: true });
 
 export const placeInputSchema = placeBaseSchema.superRefine((value, ctx) => {
   if (value.images.length !== value.thumbnails.length) {

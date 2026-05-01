@@ -11,6 +11,7 @@ type MapViewProps = {
   places: Place[];
   selectedPlaceId: number | null;
   pendingCenter: { lat: number; lng: number } | null;
+  focusPendingCenter: boolean;
   canEdit: boolean;
   theme: 'light' | 'dark';
   onCenterChange: (center: { lat: number; lng: number }) => void;
@@ -149,6 +150,7 @@ export function MapView({
   places,
   selectedPlaceId,
   pendingCenter,
+  focusPendingCenter,
   canEdit,
   theme,
   onCenterChange,
@@ -163,7 +165,10 @@ export function MapView({
   const previousSelectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
   const selectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
   const isPickingCenter = canEdit && pendingCenter !== null;
+  const pendingCenterLat = pendingCenter?.lat;
+  const pendingCenterLng = pendingCenter?.lng;
   const isPickingCenterRef = useRef(isPickingCenter);
+  const wasFocusingPendingCenterRef = useRef(false);
 
   const bounds = useMemo(() => {
     if (places.length === 0) {
@@ -182,6 +187,26 @@ export function MapView({
   useEffect(() => {
     isPickingCenterRef.current = isPickingCenter;
   }, [isPickingCenter]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const shouldFocusPendingCenter = isPickingCenter && focusPendingCenter;
+    const wasFocusingPendingCenter = wasFocusingPendingCenterRef.current;
+    wasFocusingPendingCenterRef.current = shouldFocusPendingCenter;
+
+    if (
+      !map
+      || typeof pendingCenterLat !== 'number'
+      || typeof pendingCenterLng !== 'number'
+      || !shouldFocusPendingCenter
+      || wasFocusingPendingCenter
+    ) {
+      return;
+    }
+
+    const nextZoom = Math.max(map.getZoom(), SELECTED_PLACE_MIN_ZOOM);
+    map.easeTo({ center: [pendingCenterLng, pendingCenterLat], zoom: nextZoom, duration: 500 });
+  }, [focusPendingCenter, isPickingCenter, pendingCenterLat, pendingCenterLng]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -258,12 +283,14 @@ export function MapView({
     };
 
     map.on('move', handleMove);
-    handleMove();
+    if (!focusPendingCenter) {
+      handleMove();
+    }
 
     return () => {
       map.off('move', handleMove);
     };
-  }, [isPickingCenter, onCenterChange]);
+  }, [focusPendingCenter, isPickingCenter, onCenterChange]);
 
   useEffect(() => {
     const map = mapRef.current;
