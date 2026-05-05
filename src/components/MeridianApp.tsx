@@ -758,22 +758,24 @@ export function MeridianApp({
   };
 
   return (
-    <div className="relative h-[100svh] h-[100dvh] overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-      <MapView
-        places={mapPlaces}
-        routes={mapRoutes}
-        selectedPlaceId={selectedPlaceId}
-        selectedRouteId={selectedRouteId}
-        pendingCenter={isPickingLocation ? pendingCenter : null}
-        focusPendingCenter={isEditingLocation || routeEndpointPicker !== null}
-        canEdit={canEdit}
-        theme={theme}
-        onCenterChange={setPendingCenter}
-        onSelectPlace={selectPlace}
-        onSelectRoute={selectRoute}
-      />
+    <div className="isolate relative h-[100svh] h-[100dvh] overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+      <div className="absolute inset-0 z-0">
+        <MapView
+          places={mapPlaces}
+          routes={mapRoutes}
+          selectedPlaceId={selectedPlaceId}
+          selectedRouteId={selectedRouteId}
+          pendingCenter={isPickingLocation ? pendingCenter : null}
+          focusPendingCenter={isEditingLocation || routeEndpointPicker !== null}
+          canEdit={canEdit}
+          theme={theme}
+          onCenterChange={setPendingCenter}
+          onSelectPlace={selectPlace}
+          onSelectRoute={selectRoute}
+        />
+      </div>
 
-      <div className="pointer-events-none absolute inset-0 flex flex-col px-[max(0.75rem,var(--safe-area-left))] pt-[max(0.75rem,var(--safe-area-top))] pr-[max(0.75rem,var(--safe-area-right))] md:p-6">
+      <div className="pointer-events-none absolute inset-0 z-30 flex flex-col px-[max(0.75rem,var(--safe-area-left))] pt-[max(0.75rem,var(--safe-area-top))] pr-[max(0.75rem,var(--safe-area-right))] md:p-6">
         <Header canEdit={canEdit} onCreate={beginCreate} onShowMessage={showMessage} siteDescription={siteDescription} />
         <div className="flex-1" />
         <AnimatePresence initial={false}>
