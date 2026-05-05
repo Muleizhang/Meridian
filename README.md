@@ -46,7 +46,7 @@
 
 ## 3. 数据模型
 
-当前数据模型仍基于 Postgres 单表 `places`：
+当前数据模型基于 Postgres 的 `places` 与 `routes`：
 
 ```sql
 CREATE TABLE places (
@@ -66,6 +66,43 @@ CREATE TABLE places (
 
 CREATE INDEX idx_places_visited_at ON places(visited_at);
 CREATE INDEX idx_places_share_token ON places(share_token) WHERE share_token IS NOT NULL;
+
+CREATE TABLE routes (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  images TEXT[] NOT NULL DEFAULT '{}',
+  thumbnails TEXT[] NOT NULL DEFAULT '{}',
+  author TEXT,
+  start_lat DOUBLE PRECISION NOT NULL,
+  start_lng DOUBLE PRECISION NOT NULL,
+  end_lat DOUBLE PRECISION NOT NULL,
+  end_lng DOUBLE PRECISION NOT NULL,
+  departure_at TIMESTAMPTZ,
+  arrival_at TIMESTAMPTZ,
+  transport_type TEXT NOT NULL DEFAULT 'car',
+  is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+  share_token TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_routes_departure_at ON routes(departure_at);
+CREATE INDEX idx_routes_transport_type ON routes(transport_type);
+CREATE INDEX idx_routes_share_token ON routes(share_token) WHERE share_token IS NOT NULL;
+```
+
+若已有旧版 `routes` 表，需执行：
+
+```sql
+ALTER TABLE routes
+  ADD COLUMN IF NOT EXISTS content TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS thumbnails TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS author TEXT,
+  ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS share_token TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_routes_share_token ON routes(share_token) WHERE share_token IS NOT NULL;
 ```
 
 **当前代码约束：**

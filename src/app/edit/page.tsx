@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { MeridianApp } from '@/components/MeridianApp';
-import { listPlaces } from '@/lib/db';
+import { listPlaces, listRoutes } from '@/lib/db';
 import { requireEditSession } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -36,16 +36,20 @@ export default async function EditPage({ searchParams }: EditPageProps) {
     redirect(`/login?next=${encodeURIComponent(nextTarget)}`);
   }
 
-  const places = await listPlaces();
+  const [places, routes] = await Promise.all([listPlaces(), listRoutes()]);
   const rawPlace = Array.isArray(params.place) ? params.place[0] : params.place;
+  const rawRoute = Array.isArray(params.route) ? params.route[0] : params.route;
   const focusPlaceId = rawPlace ? Number(rawPlace) : undefined;
+  const focusRouteId = rawRoute ? Number(rawRoute) : undefined;
   const siteDescription = process.env.MERIDIAN_SITE_DESCRIPTION ?? '一个双人使用的私密旅行记录网站';
 
   return (
     <MeridianApp
       initialPlaces={places}
+      initialRoutes={routes}
       canEdit
       focusPlaceId={Number.isInteger(focusPlaceId) ? focusPlaceId : undefined}
+      focusRouteId={Number.isInteger(focusRouteId) ? focusRouteId : undefined}
       siteDescription={siteDescription}
     />
   );

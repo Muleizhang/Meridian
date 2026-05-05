@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { getServerEnv } from '@/lib/env';
-import type { CreatePlaceInput, Place, UpdatePlaceInput } from '@/lib/types';
+import type { CreatePlaceInput, CreateRouteInput, Place, Route, UpdatePlaceInput, UpdateRouteInput } from '@/lib/types';
 
 function getSql() {
   return neon(getServerEnv().DATABASE_URL);
@@ -21,8 +21,33 @@ const PLACE_COLUMNS = `
   created_at
 `;
 
+const ROUTE_COLUMNS = `
+  id,
+  title,
+  content,
+  images,
+  thumbnails,
+  author,
+  start_lat,
+  start_lng,
+  end_lat,
+  end_lng,
+  departure_at,
+  arrival_at,
+  transport_type,
+  is_locked,
+  share_token,
+  created_at
+`;
+
 type PlaceRow = Omit<Place, 'visited_at' | 'created_at'> & {
   visited_at: string | Date | null;
+  created_at: string | Date;
+};
+
+type RouteRow = Omit<Route, 'departure_at' | 'arrival_at' | 'created_at'> & {
+  departure_at: string | Date | null;
+  arrival_at: string | Date | null;
   created_at: string | Date;
 };
 
@@ -43,10 +68,23 @@ function toDateTimeString(value: string | Date) {
   return value instanceof Date ? value.toISOString() : value;
 }
 
+function toNullableDateTimeString(value: string | Date | null) {
+  return value ? toDateTimeString(value) : null;
+}
+
 function normalizePlace(row: PlaceRow): Place {
   return {
     ...row,
     visited_at: toDateOnly(row.visited_at),
+    created_at: toDateTimeString(row.created_at)
+  };
+}
+
+function normalizeRoute(row: RouteRow): Route {
+  return {
+    ...row,
+    departure_at: toNullableDateTimeString(row.departure_at),
+    arrival_at: toNullableDateTimeString(row.arrival_at),
     created_at: toDateTimeString(row.created_at)
   };
 }
@@ -132,9 +170,114 @@ export async function deletePlace(id: number) {
   return (rows as Array<{ id: number }>)[0] ?? null;
 }
 
+export async function listRoutes() {
+  const rows = await getSql().query(
+    `SELECT ${ROUTE_COLUMNS} FROM routes ORDER BY COALESCE(departure_at, created_at) DESC, created_at DESC`
+  );
+  return (rows as RouteRow[]).map(normalizeRoute);
+}
+
+export async function getRouteById(id: number) {
+  const rows = await getSql().query(`SELECT ${ROUTE_COLUMNS} FROM routes WHERE id = $1 LIMIT 1`, [id]);
+  const route = (rows as RouteRow[])[0];
+  return route ? normalizeRoute(route) : null;
+}
+
+export async function createRoute(input: CreateRouteInput) {
+  const rows = await getSql().query(
+    `INSERT INTO routes (
+      title,
+      content,
+      images,
+      thumbnails,
+      author,
+      start_lat,
+      start_lng,
+      end_lat,
+      end_lng,
+      departure_at,
+      arrival_at,
+      transport_type,
+      is_locked,
+      share_token
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL)
+    RETURNING ${ROUTE_COLUMNS}`,
+    [
+      input.title,
+      input.content,
+      input.images,
+      input.thumbnails,
+      input.author,
+      input.start_lat,
+      input.start_lng,
+      input.end_lat,
+      input.end_lng,
+      input.departure_at,
+      input.arrival_at,
+      input.transport_type,
+      input.is_locked
+    ]
+  );
+
+  return normalizeRoute((rows as RouteRow[])[0]);
+}
+
+export async function updateRoute(id: number, input: UpdateRouteInput) {
+  const rows = await getSql().query(
+    `UPDATE routes
+    SET
+      title = $1,
+      content = $2,
+      images = $3,
+      thumbnails = $4,
+      author = $5,
+      start_lat = $6,
+      start_lng = $7,
+      end_lat = $8,
+      end_lng = $9,
+      departure_at = $10,
+      arrival_at = $11,
+      transport_type = $12,
+      is_locked = $13,
+      share_token = CASE WHEN $13 THEN share_token ELSE NULL END
+    WHERE id = $14
+    RETURNING ${ROUTE_COLUMNS}`,
+    [
+      input.title,
+      input.content,
+      input.images,
+      input.thumbnails,
+      input.author,
+      input.start_lat,
+      input.start_lng,
+      input.end_lat,
+      input.end_lng,
+      input.departure_at,
+      input.arrival_at,
+      input.transport_type,
+      input.is_locked,
+      id
+    ]
+  );
+
+  const route = (rows as RouteRow[])[0];
+  return route ? normalizeRoute(route) : null;
+}
+
+export async function deleteRoute(id: number) {
+  const rows = await getSql().query(`DELETE FROM routes WHERE id = $1 RETURNING id`, [id]);
+  return (rows as Array<{ id: number }>)[0] ?? null;
+}
+
 export async function listAuthors() {
   const rows = await getSql().query(
-    `SELECT DISTINCT author FROM places WHERE author IS NOT NULL AND author <> '' ORDER BY author ASC`
+    `SELECT DISTINCT author
+    FROM (
+      SELECT author FROM places WHERE author IS NOT NULL AND author <> ''
+      UNION
+      SELECT author FROM routes WHERE author IS NOT NULL AND author <> ''
+    ) authors
+    ORDER BY author ASC`
   );
 
   return (rows as Array<{ author: string | null }>).map((row) => row.author).filter((author): author is string => Boolean(author));

@@ -1,21 +1,25 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { isSanitizedLockedPlace, type Place } from '@/lib/types';
+import { isSanitizedLockedPlace, type Place, type Route } from '@/lib/types';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
 type MapViewProps = {
   places: Place[];
+  routes: Route[];
   selectedPlaceId: number | null;
+  selectedRouteId: number | null;
   pendingCenter: { lat: number; lng: number } | null;
   focusPendingCenter: boolean;
   canEdit: boolean;
   theme: 'light' | 'dark';
   onCenterChange: (center: { lat: number; lng: number }) => void;
   onSelectPlace: (placeId: number) => void;
+  onSelectRoute: (routeId: number) => void;
 };
 
 type StoredViewport = {
@@ -28,6 +32,8 @@ const VIEWPORT_STORAGE_KEY = 'meridian-map-viewport';
 const DEFAULT_VIEWPORT: StoredViewport = { lat: 31.2304, lng: 121.4737, zoom: 2.2 };
 const SINGLE_PLACE_ZOOM = 4;
 const SELECTED_PLACE_MIN_ZOOM = 4.5;
+const ROUTE_STROKE = 'var(--muted-strong)';
+const ROUTE_DASH_ARRAY = '4 7';
 
 const getMapStyle = (theme: MapViewProps['theme']) =>
   theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/outdoors-v12';
@@ -103,12 +109,18 @@ function getBoundsViewport(map: mapboxgl.Map, bounds: mapboxgl.LngLatBounds) {
   return { lat: center.lat, lng: center.lng, zoom: camera.zoom } satisfies StoredViewport;
 }
 
-function getFallbackViewport(map: mapboxgl.Map, places: Place[], bounds: mapboxgl.LngLatBounds | null): StoredViewport {
-  if (places.length === 0 || !bounds) {
+function getFallbackViewport(
+  map: mapboxgl.Map,
+  places: Place[],
+  routes: Route[],
+  bounds: mapboxgl.LngLatBounds | null
+): StoredViewport {
+  const itemCount = places.length + routes.length * 2;
+  if (itemCount === 0 || !bounds) {
     return DEFAULT_VIEWPORT;
   }
 
-  if (places.length === 1) {
+  if (places.length === 1 && routes.length === 0) {
     const place = places[0];
     return { lat: place.lat, lng: place.lng, zoom: SINGLE_PLACE_ZOOM };
   }
@@ -146,43 +158,178 @@ function getMarkerZIndexByPlaceId(places: Place[]) {
   return new Map(sortedPlaces.map((place, index) => [place.id, index + 1]));
 }
 
+function getRouteWidth(route: Route, selectedRouteId: number | null) {
+  return selectedRouteId === route.id ? 1.8 : 1.2;
+}
+
+function getRouteOpacity(route: Route, selectedRouteId: number | null) {
+  return selectedRouteId === route.id ? 0.72 : 0.48;
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function toDegrees(value: number) {
+  return (value * 180) / Math.PI;
+}
+
+function getAirRouteCoordinates(route: Route) {
+  const startLat = toRadians(route.start_lat);
+  const startLng = toRadians(route.start_lng);
+  const endLat = toRadians(route.end_lat);
+  const endLng = toRadians(route.end_lng);
+  const deltaLat = endLat - startLat;
+  const deltaLng = endLng - startLng;
+  const angularDistance = 2 * Math.asin(Math.sqrt(
+    Math.sin(deltaLat / 2) ** 2
+    + Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2
+  ));
+
+  if (!Number.isFinite(angularDistance) || angularDistance < 0.000001) {
+    return [
+      [route.start_lng, route.start_lat],
+      [route.end_lng, route.end_lat]
+    ];
+  }
+
+  const steps = Math.min(96, Math.max(18, Math.ceil(angularDistance * 40)));
+  const sinDistance = Math.sin(angularDistance);
+
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const progress = index / steps;
+    const startWeight = Math.sin((1 - progress) * angularDistance) / sinDistance;
+    const endWeight = Math.sin(progress * angularDistance) / sinDistance;
+    const x = startWeight * Math.cos(startLat) * Math.cos(startLng) + endWeight * Math.cos(endLat) * Math.cos(endLng);
+    const y = startWeight * Math.cos(startLat) * Math.sin(startLng) + endWeight * Math.cos(endLat) * Math.sin(endLng);
+    const z = startWeight * Math.sin(startLat) + endWeight * Math.sin(endLat);
+    const lat = Math.atan2(z, Math.sqrt(x ** 2 + y ** 2));
+    const lng = Math.atan2(y, x);
+
+    return [toDegrees(lng), toDegrees(lat)];
+  });
+}
+
+function getRouteCoordinates(route: Route) {
+  if (route.transport_type === 'plane') {
+    return getAirRouteCoordinates(route);
+  }
+
+  return [
+    [route.start_lng, route.start_lat],
+    [route.end_lng, route.end_lat]
+  ];
+}
+
+function getProjectedRoutePath(map: mapboxgl.Map, coordinates: number[][]) {
+  return coordinates
+    .map(([lng, lat]) => map.project([lng, lat]))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(' ');
+}
+
+type RouteOverlayItem = {
+  id: number;
+  label: string;
+  width: number;
+  opacity: number;
+  coordinates: number[][];
+};
+
+type RoutePathElements = {
+  line: SVGPathElement | null;
+  hit: SVGPathElement | null;
+};
+
 export function MapView({
   places,
+  routes,
   selectedPlaceId,
+  selectedRouteId,
   pendingCenter,
   focusPendingCenter,
   canEdit,
   theme,
   onCenterChange,
-  onSelectPlace
+  onSelectPlace,
+  onSelectRoute
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const themeRef = useRef<MapViewProps['theme']>(theme);
   const currentStyleRef = useRef<string | null>(null);
   const markersRef = useRef<Map<number, mapboxgl.Marker>>(new Map());
+  const routeOverlayRef = useRef<HTMLDivElement | null>(null);
+  const routePathRefs = useRef<Map<number, RoutePathElements>>(new Map());
+  const [routeOverlayElement, setRouteOverlayElement] = useState<HTMLDivElement | null>(null);
+  const [mapRenderVersion, setMapRenderVersion] = useState(0);
   const hasStoredViewportRef = useRef(false);
-  const previousSelectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
+  const previousSelectionRef = useRef<{ placeId: number | null; routeId: number | null }>({
+    placeId: selectedPlaceId,
+    routeId: selectedRouteId
+  });
   const selectedPlaceIdRef = useRef<number | null>(selectedPlaceId);
+  const selectedRouteIdRef = useRef<number | null>(selectedRouteId);
   const isPickingCenter = canEdit && pendingCenter !== null;
   const pendingCenterLat = pendingCenter?.lat;
   const pendingCenterLng = pendingCenter?.lng;
   const isPickingCenterRef = useRef(isPickingCenter);
   const wasFocusingPendingCenterRef = useRef(false);
+  const didFitInitialRoutesRef = useRef(false);
 
   const bounds = useMemo(() => {
-    if (places.length === 0) {
+    if (places.length === 0 && routes.length === 0) {
       return null;
     }
 
     const nextBounds = new mapboxgl.LngLatBounds();
     places.forEach((place) => nextBounds.extend([place.lng, place.lat]));
+    routes.forEach((route) => {
+      nextBounds.extend([route.start_lng, route.start_lat]);
+      nextBounds.extend([route.end_lng, route.end_lat]);
+    });
     return nextBounds;
-  }, [places]);
+  }, [places, routes]);
+
+  const routeOverlayItems = useMemo<RouteOverlayItem[]>(
+    () => routes.map((route) => ({
+      id: route.id,
+      label: route.title || '线路',
+      width: getRouteWidth(route, selectedRouteId),
+      opacity: getRouteOpacity(route, selectedRouteId),
+      coordinates: getRouteCoordinates(route)
+    })),
+    [routes, selectedRouteId]
+  );
+  const orderedRouteOverlayItems = useMemo(
+    () => [...routeOverlayItems].sort((left, right) => Number(left.id === selectedRouteId) - Number(right.id === selectedRouteId)),
+    [routeOverlayItems, selectedRouteId]
+  );
+  const routeOverlayItemsRef = useRef<RouteOverlayItem[]>(orderedRouteOverlayItems);
 
   useEffect(() => {
     selectedPlaceIdRef.current = selectedPlaceId;
   }, [selectedPlaceId]);
+
+  useEffect(() => {
+    selectedRouteIdRef.current = selectedRouteId;
+  }, [selectedRouteId]);
+
+  useEffect(() => {
+    routeOverlayItemsRef.current = orderedRouteOverlayItems;
+  }, [orderedRouteOverlayItems]);
+
+  const setRoutePathElement = (routeId: number, elementName: keyof RoutePathElements, element: SVGPathElement | null) => {
+    const elements = routePathRefs.current.get(routeId) ?? { line: null, hit: null };
+    elements[elementName] = element;
+
+    if (elements.line || elements.hit) {
+      routePathRefs.current.set(routeId, elements);
+    } else {
+      routePathRefs.current.delete(routeId);
+    }
+  };
 
   useEffect(() => {
     isPickingCenterRef.current = isPickingCenter;
@@ -225,11 +372,13 @@ export function MapView({
     });
 
     const markers = markersRef.current;
+    const routePathMap = routePathRefs.current;
     const handleStyleLoad = () => {
       applyMapAtmosphere(map, themeRef.current);
+      setMapRenderVersion((version) => version + 1);
     };
     const handleMoveEnd = () => {
-      if (selectedPlaceIdRef.current || isPickingCenterRef.current) {
+      if (selectedPlaceIdRef.current || selectedRouteIdRef.current || isPickingCenterRef.current) {
         return;
       }
 
@@ -242,14 +391,29 @@ export function MapView({
     map.on('moveend', handleMoveEnd);
     mapRef.current = map;
 
+    const routeOverlay = document.createElement('div');
+    routeOverlay.style.position = 'absolute';
+    routeOverlay.style.inset = '0';
+    routeOverlay.style.zIndex = '2';
+    routeOverlay.style.pointerEvents = 'none';
+    routeOverlay.style.overflow = 'visible';
+    map.getCanvasContainer().appendChild(routeOverlay);
+    routeOverlayRef.current = routeOverlay;
+    setRouteOverlayElement(routeOverlay);
+    setMapRenderVersion((version) => version + 1);
+
     return () => {
       map.off('style.load', handleStyleLoad);
       map.off('moveend', handleMoveEnd);
       markers.forEach((marker) => marker.remove());
       markers.clear();
+      routeOverlayRef.current?.remove();
+      routeOverlayRef.current = null;
+      setRouteOverlayElement(null);
       map.remove();
       mapRef.current = null;
       currentStyleRef.current = null;
+      routePathMap.clear();
     };
   }, []);
 
@@ -294,10 +458,10 @@ export function MapView({
 
   useEffect(() => {
     const map = mapRef.current;
-    const previousSelectedPlaceId = previousSelectedPlaceIdRef.current;
-    previousSelectedPlaceIdRef.current = selectedPlaceId;
+    const previousSelection = previousSelectionRef.current;
+    previousSelectionRef.current = { placeId: selectedPlaceId, routeId: selectedRouteId };
 
-    if (!map || !bounds || selectedPlaceId) {
+    if (!map || !bounds || selectedPlaceId || selectedRouteId) {
       return;
     }
 
@@ -306,8 +470,8 @@ export function MapView({
       hasStoredViewportRef.current = true;
     }
 
-    if (previousSelectedPlaceId) {
-      const restoreViewport = storedViewport ?? getFallbackViewport(map, places, bounds);
+    if (previousSelection.placeId || previousSelection.routeId) {
+      const restoreViewport = storedViewport ?? getFallbackViewport(map, places, routes, bounds);
       const currentViewport = getCurrentViewport(map);
       if (!isSameViewport(currentViewport, restoreViewport)) {
         map.easeTo({ center: [restoreViewport.lng, restoreViewport.lat], zoom: restoreViewport.zoom, duration: 700 });
@@ -315,18 +479,19 @@ export function MapView({
       return;
     }
 
-    if (storedViewport) {
+    if (storedViewport && (routes.length === 0 || didFitInitialRoutesRef.current)) {
       return;
     }
 
-    const fallbackViewport = getFallbackViewport(map, places, bounds);
+    const fallbackViewport = getFallbackViewport(map, places, routes, bounds);
     const currentViewport = getCurrentViewport(map);
     if (!isSameViewport(currentViewport, fallbackViewport)) {
       map.jumpTo({ center: [fallbackViewport.lng, fallbackViewport.lat], zoom: fallbackViewport.zoom });
     }
     persistViewportValue(fallbackViewport);
+    didFitInitialRoutesRef.current = routes.length > 0;
     hasStoredViewportRef.current = true;
-  }, [bounds, places, selectedPlaceId]);
+  }, [bounds, places, routes, selectedPlaceId, selectedRouteId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -340,14 +505,70 @@ export function MapView({
     }
 
     if (!hasStoredViewportRef.current) {
-      const fallbackViewport = getFallbackViewport(map, places, bounds);
+      const fallbackViewport = getFallbackViewport(map, places, routes, bounds);
       persistViewportValue(fallbackViewport);
       hasStoredViewportRef.current = true;
     }
 
     const nextZoom = Math.max(map.getZoom(), SELECTED_PLACE_MIN_ZOOM);
     map.easeTo({ center: [selectedPlace.lng, selectedPlace.lat], zoom: nextZoom, duration: 700 });
-  }, [bounds, places, selectedPlaceId]);
+  }, [bounds, places, routes, selectedPlaceId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedRouteId) {
+      return;
+    }
+
+    const selectedRoute = routes.find((route) => route.id === selectedRouteId);
+    if (!selectedRoute) {
+      return;
+    }
+
+    if (!hasStoredViewportRef.current) {
+      const fallbackViewport = getFallbackViewport(map, places, routes, bounds);
+      persistViewportValue(fallbackViewport);
+      hasStoredViewportRef.current = true;
+    }
+
+    const routeBounds = new mapboxgl.LngLatBounds()
+      .extend([selectedRoute.start_lng, selectedRoute.start_lat])
+      .extend([selectedRoute.end_lng, selectedRoute.end_lat]);
+    const routeViewport = getBoundsViewport(map, routeBounds);
+
+    if (routeViewport) {
+      persistViewportValue(routeViewport);
+      hasStoredViewportRef.current = true;
+      map.easeTo({ center: [routeViewport.lng, routeViewport.lat], zoom: Math.max(routeViewport.zoom, 3), duration: 700 });
+    }
+  }, [bounds, places, routes, selectedRouteId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !routeOverlayElement) {
+      return;
+    }
+
+    const updateRouteOverlayPaths = () => {
+      routeOverlayItemsRef.current.forEach((route) => {
+        const path = getProjectedRoutePath(map, route.coordinates);
+        const elements = routePathRefs.current.get(route.id);
+        elements?.line?.setAttribute('d', path);
+        elements?.hit?.setAttribute('d', path);
+      });
+    };
+
+    updateRouteOverlayPaths();
+    map.on('render', updateRouteOverlayPaths);
+    map.on('resize', updateRouteOverlayPaths);
+    map.on('style.load', updateRouteOverlayPaths);
+
+    return () => {
+      map.off('render', updateRouteOverlayPaths);
+      map.off('resize', updateRouteOverlayPaths);
+      map.off('style.load', updateRouteOverlayPaths);
+    };
+  }, [mapRenderVersion, orderedRouteOverlayItems, routeOverlayElement]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -365,7 +586,7 @@ export function MapView({
       markerElement.type = 'button';
       markerElement.className = 'group relative border-0 bg-transparent p-0';
       markerElement.setAttribute('aria-label', place.title || 'place marker');
-      markerElement.style.zIndex = String(markerZIndexByPlaceId.get(place.id) ?? 1);
+      markerElement.style.zIndex = String(100 + (markerZIndexByPlaceId.get(place.id) ?? 1));
 
       const bubble = document.createElement('div');
       bubble.className = [
@@ -407,5 +628,67 @@ export function MapView({
     });
   }, [onSelectPlace, places, selectedPlaceId, theme]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  const handleProjectedRouteSelect = (routeId: number) => {
+    const map = mapRef.current;
+    if (map && !selectedPlaceIdRef.current && !selectedRouteIdRef.current) {
+      persistViewportValue(getCurrentViewport(map));
+      hasStoredViewportRef.current = true;
+    }
+    onSelectRoute(routeId);
+  };
+
+  const routeOverlay = (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden={orderedRouteOverlayItems.length === 0}>
+      {orderedRouteOverlayItems.map((route) => {
+        return (
+          <g
+            key={route.id}
+            aria-label={route.label}
+            className="outline-none"
+            role="button"
+            tabIndex={0}
+            onClick={() => handleProjectedRouteSelect(route.id)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleProjectedRouteSelect(route.id);
+              }
+              }}
+            >
+            <path
+              ref={(element) => setRoutePathElement(route.id, 'line', element)}
+              d=""
+              fill="none"
+              stroke={ROUTE_STROKE}
+              strokeDasharray={ROUTE_DASH_ARRAY}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeOpacity={route.opacity}
+              strokeWidth={route.width}
+              vectorEffect="non-scaling-stroke"
+              style={{ pointerEvents: 'none' }}
+            />
+            <path
+              ref={(element) => setRoutePathElement(route.id, 'hit', element)}
+              d=""
+              fill="none"
+              stroke="transparent"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={Math.max(route.width + 18, 24)}
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+
+  return (
+    <>
+      <div ref={containerRef} className="h-full w-full" />
+      {routeOverlayElement ? createPortal(routeOverlay, routeOverlayElement) : null}
+    </>
+  );
 }

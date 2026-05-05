@@ -1,21 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import type { Place } from '@/lib/types';
+import type { Place, Route } from '@/lib/types';
 
 type TimelineSliderProps = {
   places: Place[];
+  routes: Route[];
   cursorTime: number;
   nowTime: number;
   onCursorTimeChange: (cursorTime: number) => void;
 };
 
 type TimelinePoint = {
-  id: number;
+  id: string;
   time: number;
   isLocked: boolean;
   title: string;
   hasDate: boolean;
+  kind: 'place' | 'route';
 };
 
 const WHEEL_STEP_MONTHS = 1;
@@ -24,10 +26,14 @@ const TRACK_SIDE_PADDING = 20;
 const MIN_LABEL_GAP_PX = 84;
 const TRACK_INNER_PADDING_PX = 12;
 
-function getMinTime(places: Place[], nowTime: number) {
-  const datedTimes = places
+function getMinTime(places: Place[], routes: Route[], nowTime: number) {
+  const placeTimes = places
     .map((place) => (place.visited_at ? new Date(place.visited_at).getTime() : null))
     .filter((time): time is number => time !== null && Number.isFinite(time));
+  const routeTimes = routes
+    .map((route) => (route.departure_at ? new Date(route.departure_at).getTime() : null))
+    .filter((time): time is number => time !== null && Number.isFinite(time));
+  const datedTimes = [...placeTimes, ...routeTimes];
 
   if (datedTimes.length === 0) {
     const fallback = new Date(nowTime);
@@ -108,7 +114,7 @@ function buildTicks(startTime: number, endTime: number) {
   return ticks;
 }
 
-export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange }: TimelineSliderProps) {
+export function TimelineSlider({ places, routes, cursorTime, nowTime, onCursorTimeChange }: TimelineSliderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef(1);
   const isDraggingRef = useRef(false);
@@ -117,19 +123,29 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
   const [displayCursorTime, setDisplayCursorTime] = useState(cursorTime);
   const [, startTransition] = useTransition();
   const [trackWidth, setTrackWidth] = useState(1);
-  const [activePointId, setActivePointId] = useState<number | null>(null);
-  const minTime = useMemo(() => getMinTime(places, nowTime), [nowTime, places]);
+  const [activePointId, setActivePointId] = useState<string | null>(null);
+  const minTime = useMemo(() => getMinTime(places, routes, nowTime), [nowTime, places, routes]);
   const cursorMonth = useMemo(() => toMonthFloat(displayCursorTime), [displayCursorTime]);
   const timelinePoints = useMemo<TimelinePoint[]>(
-    () =>
-      places.map((place) => ({
-        id: place.id,
+    () => [
+      ...places.map((place) => ({
+        id: `place-${place.id}`,
         time: place.visited_at ? new Date(place.visited_at).getTime() : nowTime,
         isLocked: place.is_locked,
         title: place.title?.trim() ? place.title : '未命名记忆点',
-        hasDate: Boolean(place.visited_at)
+        hasDate: Boolean(place.visited_at),
+        kind: 'place' as const
       })),
-    [nowTime, places]
+      ...routes.map((route) => ({
+        id: `route-${route.id}`,
+        time: route.departure_at ? new Date(route.departure_at).getTime() : nowTime,
+        isLocked: route.is_locked,
+        title: route.title?.trim() ? route.title : '未命名线路',
+        hasDate: Boolean(route.departure_at),
+        kind: 'route' as const
+      }))
+    ],
+    [nowTime, places, routes]
   );
   const activePoint = useMemo(
     () => (activePointId === null ? null : timelinePoints.find((point) => point.id === activePointId) ?? null),
@@ -343,7 +359,11 @@ export function TimelineSlider({ places, cursorTime, nowTime, onCursorTimeChange
                   <span
                     className="block h-2.5 w-2.5 rounded-full border border-white/70 shadow-sm"
                     style={{
-                      backgroundColor: point.isLocked ? 'var(--marker-muted)' : 'var(--marker)'
+                      backgroundColor: point.isLocked
+                        ? 'var(--marker-muted)'
+                        : point.kind === 'route'
+                          ? 'var(--muted-strong)'
+                          : 'var(--marker)'
                     }}
                   />
                 </button>
